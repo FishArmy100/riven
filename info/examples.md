@@ -1,7 +1,7 @@
 # Examples
 ### Creating a summing function
 ```rs
-fn []Int.sum(self) -> Int
+fn sum(self) -> Int for []Int // for complex types, can have a `for` clause
 {
     let r = 0;
     for i in 0..self.len()
@@ -9,7 +9,7 @@ fn []Int.sum(self) -> Int
         r += self[i];
     }
 
-    return r;
+    return r; 
 }
 
 let total = [1, 2, 3, 4].sum();
@@ -22,7 +22,7 @@ struct Board
     board: []Int = [0; 9]
 }
 
-fn Board.iter(self) -> fn() -> ?Int
+fn Board.iter(self) -> Fn() -> ?Int
 {
     let i = 0;
     return || => {
