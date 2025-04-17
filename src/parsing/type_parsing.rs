@@ -1,7 +1,7 @@
 use crate::lexing::token::TokenType;
 use super::ast::*;
 
-use super::{parse_generic_args, token_reader::TokenReader, ParserError, ParserResult};
+use super::{token_reader::TokenReader, ParserError, ParserResult};
 
 pub fn peek_type(reader: &TokenReader) -> Option<(TypeName, usize)>
 {
@@ -57,15 +57,20 @@ pub fn expect_type_name(reader: &mut TokenReader) -> ParserResult<TypeName>
 
 pub fn parse_type_name(reader: &mut TokenReader) -> ParserResult<Option<TypeName>>
 {
-    let Some(mut inner) = match reader.current().map(|c| c.token_type)
+    let Some(inner) = match reader.current().map(|c| c.token_type)
     {
-        Some(TokenType::Identifier) | Some(TokenType::SelfType) => 
+        Some(TokenType::Identifier) => 
         {
             let identifier = reader.advance().unwrap();
-            let args = parse_generic_args(reader)?;
-            Ok(Some(TypeName::Identifier{
-                name: identifier,
-                args,
+            Ok(Some(TypeName::Identifier(identifier)))
+        },
+        Some(TokenType::Question) => {
+            let question_mark = reader.advance().unwrap();
+            let type_name = expect_type_name(reader)?;
+
+            Ok(Some(TypeName::Optional { 
+                question_mark, 
+                type_name: Box::new(type_name)
             }))
         }
         Some(TokenType::OpenBracket) => 
@@ -79,26 +84,19 @@ pub fn parse_type_name(reader: &mut TokenReader) -> ParserResult<Option<TypeName
 
             Ok(Some(TypeName::Array { open_bracket, close_bracket, type_name }))
         }
-        Some(TokenType::Fn) =>
+        Some(TokenType::FnType) =>
         {
             Ok(Some(parse_fn_type(reader)?))
         },
         _ => return Ok(None),
     }? else { return Ok(None) };
 
-    while let Some(dot) = reader.check(TokenType::Dot)
-    {
-        let name = reader.expect(TokenType::Identifier)?;
-        let args = parse_generic_args(reader)?;
-        inner = TypeName::Access { inner: Box::new(inner), dot, name, args }
-    }
-
     Ok(Some(inner))
 }
 
 fn parse_fn_type(reader: &mut TokenReader) -> ParserResult<TypeName>
 {
-    let fn_tok = reader.expect(TokenType::Fn)?;
+    let fn_type_tok = reader.expect(TokenType::FnType)?;
     let open_paren = reader.expect(TokenType::OpenParen)?;
 
     let mut parameter_types = vec![];
@@ -126,7 +124,7 @@ fn parse_fn_type(reader: &mut TokenReader) -> ParserResult<TypeName>
     };
 
     Ok(TypeName::Function { 
-        fn_tok, 
+        fn_type_tok, 
         open_paren, 
         parameter_types, 
         close_paren, 

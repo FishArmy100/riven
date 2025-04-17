@@ -2,7 +2,7 @@
 Below is an example tick tack toe program written in `Riven`
 
 ```rs
-use system.{print, println, read_line};
+use system.io;
 
 const BOARD_SIZE = 3;
 const EMPTY_CELL = ' ';
@@ -23,9 +23,9 @@ fn Game.new() ->Self
 
 fn Game.print_board(self) ->void
 {
-    for i in 0..BOARD_SIZE
+    for i in range(0, BOARD_SIZE)
     {
-        for j in 0..BOARD_SIZE
+        for j in range(0, BOARD_SIZE)
         {
             print(" ");
             print(self.board[i * BOARD_SIZE + j]);
@@ -56,7 +56,7 @@ fn Game.make_move(self, pos: Int) ->Bool
 
 fn Game.check_win(self) ->Bool
 {
-    for i in 0..BOARD_SIZE
+    for i in range(0, BOARD_SIZE)
     {
         if self.board[i * BOARD_SIZE] != EMPTY_CELL &&
            self.board[i * BOARD_SIZE] == self.board[i * BOARD_SIZE + 1] &&
@@ -66,7 +66,7 @@ fn Game.check_win(self) ->Bool
         }
     }
 
-    for i in 0..BOARD_SIZE
+    for i in range(0, BOARD_SIZE)
     {
         if self.board[i] != EMPTY_CELL &&
            self.board[i] == self.board[i + BOARD_SIZE] &&
@@ -95,7 +95,7 @@ fn Game.check_win(self) ->Bool
 
 fn Game.is_draw(self) ->Bool
 {
-    for i in 0..(BOARD_SIZE * BOARD_SIZE)
+    for i in range(0, BOARD_SIZE * BOARD_SIZE)
     {
         if self.board[i] == EMPTY_CELL
         {

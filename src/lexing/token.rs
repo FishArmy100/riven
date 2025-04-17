@@ -80,6 +80,7 @@ pub enum TokenType
     Colon,
     Comma,
     Hash,
+    Question,
 
     // Literal
     IntegerLiteral,

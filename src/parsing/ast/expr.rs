@@ -2,20 +2,24 @@ use either::Either;
 
 use crate::{lexing::token::Token, utils::TextPos};
 
-use super::{LetCondition, Pattern, Statement, TypeName};
+use super::{BlockStmt, TypeName};
 
 #[derive(Debug, Clone)]
 pub struct LambdaParam
 {
     pub name: Token,
-    pub colon: Option<Token>,
-    pub type_name: Option<TypeName>
+    pub type_name: Option<(Token, TypeName)>
 }
 
 #[derive(Debug, Clone)]
 pub enum LambdaParams
 {
     Simple(Token),
+    Empty
+    {
+        pipes: Token,
+        return_type: Option<(Token, TypeName)>,
+    },
     Complex
     {
         open_pipe: Token,
@@ -26,12 +30,14 @@ pub enum LambdaParams
     }
 }
 
+pub type LambdaBody = Either<Box<Expression>, Box<BlockStmt>>;
+
 #[derive(Debug, Clone)]
 pub struct LambdaExpr
 {
     pub params: LambdaParams,
     pub arrow: Token,
-    pub expression: Box<Expression>
+    pub body: LambdaBody
 }
 
 #[derive(Debug, Clone)]
@@ -84,15 +90,6 @@ pub struct BinaryExpr
 }
 
 #[derive(Debug, Clone)]
-pub struct BlockExpr
-{
-    pub open_brace: Token,
-    pub statements: Vec<Statement>,
-    pub expression: Option<Box<Expression>>,
-    pub close_brace: Token,
-}
-
-#[derive(Debug, Clone)]
 pub struct ConstructionArg
 {
     pub name: Token,
@@ -115,22 +112,6 @@ pub struct TypeValueExpr
     pub type_name: TypeName,
     pub dot: Token,
     pub name: Token,
-}
-
-#[derive(Debug, Clone)]
-pub struct IfExpr
-{
-    pub if_tok: Token,
-    pub condition: LetCondition,
-    pub block: BlockExpr,
-    pub else_branch: Option<ElseBranch>
-}
-
-#[derive(Debug, Clone)]
-pub struct ElseBranch
-{
-    pub else_tok: Token,
-    pub body: Either<Box<IfExpr>, BlockExpr>,
 }
 
 #[derive(Debug, Clone)]
@@ -158,7 +139,6 @@ pub enum Expression
     Identifier(Token),
     Grouping(GroupingExpr),
     SelfExpr(Token),
-    BlockExpr(BlockExpr),
     TypeValue(TypeValueExpr),
     Construction(ConstructionExpr),
     Call(CallExpr),
@@ -166,7 +146,6 @@ pub enum Expression
     Index(IndexExpr),
     Unary(UnaryExpr),
     Binary(BinaryExpr),
-    IfExpr(IfExpr),
     Cast(CastExpr)
 }
 
@@ -179,11 +158,27 @@ impl Expression
             Expression::Lambda(lambda_expr) => {
                 match &lambda_expr.params
                 {
-                    LambdaParams::Simple(token) => {
-                        token.pos + lambda_expr.expression.get_pos()
+                    LambdaParams::Simple(token) => 
+                    {
+                        token.pos + lambda_expr.body.as_ref()
+                            .map_either(|a| a.get_pos(), |b| b.open_brace.pos + b.close_brace.pos)
+                            .either_into()
                     },
-                    LambdaParams::Complex { open_pipe, parameters: _, close_pipe: _, arrow: _, return_type: _ } => {
-                        open_pipe.pos + lambda_expr.expression.get_pos()
+                    LambdaParams::Complex { open_pipe, parameters: _, close_pipe: _, arrow: _, return_type: _ } => 
+                    {
+                        open_pipe.pos + lambda_expr.body.as_ref()
+                            .map_either(|a| a.get_pos(), |b| b.open_brace.pos + b.close_brace.pos)
+                            .either_into()
+                    },
+                    LambdaParams::Empty { pipes, return_type } => 
+                    {
+                        let mut pos = pipes.pos;
+                        if let Some((colon, ret)) = return_type
+                        {
+                            pos = pos + colon.pos + ret.get_pos()
+                        }
+
+                        pos
                     },
                 }
             },
@@ -192,17 +187,13 @@ impl Expression
             Expression::Identifier(token) => token.pos,
             Expression::Grouping(group) => group.open_paren.pos + group.close_paren.pos,
             Expression::SelfExpr(token) => token.pos,
-            Expression::BlockExpr(block_expr) => block_expr.open_brace.pos + block_expr.close_brace.pos,
             Expression::TypeValue(expr) => expr.name.pos + expr.type_name.get_pos(),
             Expression::Construction(expr) => expr.type_name.get_pos() + expr.close_brace.pos,
-            Expression::EnumConstruction(expr) => expr.type_name.get_pos() + expr.close_paren.pos,
             Expression::Call(call) => call.expression.get_pos() + call.close_paren.pos,
             Expression::Access(access) => access.expression.get_pos() + access.identifier.pos,
             Expression::Index(index) => index.expression.get_pos() + index.close_bracket.pos,
             Expression::Unary(unary) => unary.expression.get_pos() + unary.operator.pos,
             Expression::Binary(binary) => binary.left.get_pos() + binary.right.get_pos(),
-            Expression::IfExpr(if_expr) => if_expr.if_tok.pos + if_expr.block.close_brace.pos,
-            Expression::MatchExpr(m) => m.expression.get_pos() + m.close_brace.pos,
             Expression::Cast(cast) => cast.expression.get_pos() + cast.type_name.get_pos(),
         }
     }

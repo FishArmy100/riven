@@ -256,6 +256,7 @@ pub fn check_symbol(reader: &mut CharReader) -> Option<Token>
         ';' => Some(make_token(reader, 1, TokenType::SemiColon)),
         ':' => Some(make_token(reader, 1, TokenType::Colon)),
         '#' => Some(make_token(reader, 1, TokenType::Hash)),
+        '?' => Some(make_token(reader, 1, TokenType::Question)),
  
         '&' => {
             if reader.peek(1).is_some_and(|c| c == '&')

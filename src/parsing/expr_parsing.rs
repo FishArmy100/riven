@@ -3,7 +3,7 @@ use either::Either;
 use crate::lexing::token::TokenType;
 use self::ast::{AccessExpr, CallExpr, Expression, IndexExpr, UnaryExpr};
 
-use super::{stmt_parsing::parse_statement, *};
+use super::{stmt_parsing::{parse_block_stmt, parse_statement}, *};
 
 pub fn is_expression_and<F>(reader: &mut TokenReader, f: F) -> Option<Expression>
     where F : Fn(&TokenReader) -> bool
@@ -37,123 +37,11 @@ pub fn expect_expression<F>(reader: &mut TokenReader, f: F) -> ParserResult<Expr
     }
 }
 
-pub fn expect_block_expression(reader: &mut TokenReader) -> ParserResult<BlockExpr>
-{
-    match parse_block_expression(reader)?
-    {
-        Some(b) => Ok(b),
-        None => Err(ParserError::ExpectedBlock(reader.current()))
-    }
-}
-
 pub fn parse_expression(reader: &mut TokenReader) -> ParserResult<Option<Expression>>
 {
     if let Some(or) = parse_logical_or(reader)?
     {
         Ok(Some(or))
-    }
-    else if let Some(if_expr) = parse_if(reader)?
-    {
-        Ok(Some(Expression::IfExpr(if_expr)))
-    }
-    else if let Some(match_expr) = parse_match(reader)?
-    {
-        Ok(Some(Expression::MatchExpr(match_expr)))
-    }
-    else 
-    {
-        Ok(None)    
-    }
-}
-
-pub fn parse_match(reader: &mut TokenReader) -> ParserResult<Option<MatchExpr>>
-{
-    if let Some(match_tok) = reader.check(TokenType::Match)
-    {
-        let expression = expect_expression(reader, parse_expression)?;
-        let open_brace = reader.expect(TokenType::OpenBrace)?;
-        let branches = parse_match_branches(reader)?;
-        let close_brace = reader.expect(TokenType::CloseBrace)?;
-
-        Ok(Some(MatchExpr { 
-            match_tok, 
-            expression: Box::new(expression), 
-            open_brace, 
-            branches, 
-            close_brace
-        }))
-    }
-    else  
-    {
-        Ok(None)    
-    }
-}
-
-fn parse_match_branches(reader: &mut TokenReader) -> ParserResult<Vec<MatchBranch>>
-{
-    let mut branches = vec![];
-    while !reader.current_is(&[TokenType::CloseBrace])
-    {
-        let branch = parse_match_branch(reader)?;
-        branches.push(branch);
-
-        if !reader.current_is(&[TokenType::CloseBrace, TokenType::Comma])
-        {
-            return Err(ParserError::ExpectedToken(TokenType::CloseBrace, reader.current()));
-        }
-
-        let _ = reader.check(TokenType::Comma); // makes sure to skip the comma
-    }
-
-    Ok(branches)
-}
-
-fn parse_match_branch(reader: &mut TokenReader) -> ParserResult<MatchBranch>
-{
-    let pattern = expect_pattern(reader)?;
-    let arrow = reader.expect(TokenType::ThickArrow)?;
-    let expression = expect_expression(reader, parse_expression)?;
-
-    Ok(MatchBranch { pattern, arrow, expression: Box::new(expression) })
-}
-
-pub fn parse_if(reader: &mut TokenReader) -> ParserResult<Option<IfExpr>>
-{
-    if let Some(if_tok) = reader.check(TokenType::If)
-    {
-        let condition = expect_let_condition(reader)?;
-        let block = expect_block_expression(reader)?;
-
-        if let Some(else_tok) = reader.check(TokenType::Else)
-        {
-            let else_branch = match parse_if(reader)?
-            {
-                Some(if_expr) => ElseBranch { 
-                    else_tok, 
-                    body: Either::Left(Box::new(if_expr)) 
-                },
-                None => ElseBranch { 
-                    else_tok, 
-                    body: Either::Right(expect_block_expression(reader)?)
-                }
-            };
-
-            Ok(Some(IfExpr { 
-                if_tok, 
-                condition, 
-                block, 
-                else_branch: Some(else_branch)
-            }))
-        }
-        else 
-        {
-            Ok(Some(IfExpr { 
-                if_tok, 
-                condition, 
-                block, 
-                else_branch: None
-            }))
-        }
     }
     else 
     {
@@ -277,11 +165,7 @@ fn parse_call_args(reader: &mut TokenReader, callee: Expression) -> ParserResult
 fn parse_primary(reader: &mut TokenReader) -> ParserResult<Option<Expression>>
 {
     // make sure to check for type expressions that may conflict with below examples
-    if let Some(block) = parse_block_expression(reader)?
-    {
-        Ok(Some(Expression::BlockExpr(block)))
-    }
-    else if let Some(construction) = parse_construction_expression(reader)?
+    if let Some(construction) = parse_construction_expression(reader)?
     {
         Ok(Some(construction))
     }
@@ -297,10 +181,6 @@ fn parse_primary(reader: &mut TokenReader) -> ParserResult<Option<Expression>>
     {
         Ok(Some(array))
     }
-    else if let Some(con) = parse_enum_construction(reader)?
-    {
-        Ok(Some(con))
-    }
     else if let Some(literal) = reader.check_many(&[
         TokenType::IntegerLiteral,
         TokenType::StringLiteral,
@@ -312,58 +192,6 @@ fn parse_primary(reader: &mut TokenReader) -> ParserResult<Option<Expression>>
     ])
     {
         Ok(Some(Expression::Literal(literal)))
-    }
-    else 
-    {
-        Ok(None)
-    }
-}
-
-pub fn parse_block_expression(reader: &mut TokenReader) -> ParserResult<Option<BlockExpr>>
-{
-    if let Some(open_brace) = reader.check(TokenType::OpenBrace)
-    {
-        let mut statements = vec![];
-        while let Some(statement) = parse_statement(reader)?
-        {
-            statements.push(statement);
-        }
-
-        let expression = parse_expression(reader)?.map(|e| Box::new(e));
-        let close_brace = reader.expect(TokenType::CloseBrace)?;
-
-        let block_expr = BlockExpr {
-            open_brace,
-            statements,
-            expression,
-            close_brace,
-        };
-
-        Ok(Some(block_expr))
-    }
-    else 
-    {
-        Ok(None)    
-    }
-}
-
-fn parse_enum_construction(reader: &mut TokenReader) -> ParserResult<Option<Expression>>
-{
-    if is_type_and(reader, TypeName::is_definite).is_some()
-    {
-        let type_name = parse_type_name(reader)?.unwrap();
-        let open_paren = reader.expect(TokenType::OpenParen)?;
-        let expression = expect_expression(reader, parse_expression)?;
-        let close_paren = reader.expect(TokenType::CloseParen)?;
-
-        let con = EnumConstructionExpr {
-            type_name,
-            open_paren,
-            expression: Box::new(expression),
-            close_paren,
-        };
-
-        Ok(Some(Expression::EnumConstruction(con)))
     }
     else 
     {
@@ -508,20 +336,17 @@ fn parse_lambda_param(reader: &mut TokenReader) -> ParserResult<Option<LambdaPar
 
     if let Some(colon) = reader.check(TokenType::Colon)
     {
-        let Some(type_name) = parse_type_name(reader)? else {
-            return Err(ParserError::ExpectedType(reader.current()))
-        };
+        let type_name = expect_type_name(reader)?;
+
         Ok(Some(LambdaParam { 
             name, 
-            colon: Some(colon), 
-            type_name: Some(type_name) 
+            type_name: Some((colon, type_name))
         }))
     }
     else 
     {
         Ok(Some(LambdaParam { 
-            name, 
-            colon: None, 
+            name,
             type_name: None 
         }))
     }
@@ -566,37 +391,74 @@ fn parse_lambda_params(reader: &mut TokenReader) -> ParserResult<LambdaParams>
     Ok(LambdaParams::Complex { open_pipe, parameters, close_pipe, arrow, return_type })
 }
 
+fn parse_lambda_body(reader: &mut TokenReader) -> ParserResult<LambdaBody>
+{
+    if let Some(body) = parse_block_stmt(reader)?
+    {
+        Ok(LambdaBody::Right(Box::new(body)))
+    }
+    else if let Some(body) = parse_expression(reader)?
+    {
+        Ok(LambdaBody::Left(Box::new(body)))
+    }
+    else 
+    {
+        Err(ParserError::ExpectedALambdaBody(reader.current()))    
+    }
+}
+
 fn parse_lambda(reader: &mut TokenReader) -> ParserResult<Option<Expression>>
 {
     if let Some(tokens) = reader.check_sequence(&[TokenType::Identifier, TokenType::ThickArrow])
     {
         let name = tokens[0].clone();
         let arrow = tokens[1].clone();
-        let Some(expression) = parse_expression(reader)? else {
-            return Err(ParserError::ExpectedExpression(reader.current()));
-        };
+        let body = parse_lambda_body(reader)?;
 
         let params = LambdaParams::Simple(name);
         return Ok(Some(Expression::Lambda(LambdaExpr {
             params,
             arrow,
-            expression: Box::new(expression)
+            body,
+        })));
+    }
+
+    if let Some(pipes) = reader.check(TokenType::PipePipe)
+    {
+        let return_type = if let Some(arrow) = reader.check(TokenType::ThinArrow)
+        {
+            let type_name = expect_type_name(reader)?;
+            Some((arrow, type_name))
+        } else { None };
+
+        
+
+        let params = LambdaParams::Empty
+        {
+            pipes,
+            return_type
+        };
+
+        let arrow = reader.expect(TokenType::ThickArrow)?;
+        let body = parse_lambda_body(reader)?;
+
+        return Ok(Some(Expression::Lambda(LambdaExpr {
+            params,
+            arrow,
+            body,
         })));
     }
 
     if reader.current_is(&[TokenType::Pipe])
     {
         let params = parse_lambda_params(reader)?;
-
         let arrow = reader.expect(TokenType::ThickArrow)?;
-        let Some(expression) = parse_expression(reader)? else {
-            return Err(ParserError::ExpectedExpression(reader.current()));
-        };
+        let body = parse_lambda_body(reader)?;
 
         Ok(Some(Expression::Lambda(LambdaExpr {
             params,
             arrow,
-            expression: Box::new(expression)
+            body,
         })))
     }
     else 
