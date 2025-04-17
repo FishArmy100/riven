@@ -1,0 +1,161 @@
+use system.{print, println, read_line};
+
+const BOARD_SIZE = 3;
+const EMPTY_CELL = ' ';
+
+struct Game
+{
+    board: []char;
+    current_player: char;
+}
+
+fn Game.new() ->Self
+{
+    Self {
+        board: [EMPTY_CELL; BOARD_SIZE * BOARD_SIZE],
+        current_player: 'X'
+    }
+}
+
+fn Game.print_board(self) ->void
+{
+    for i in 0..BOARD_SIZE
+    {
+        for j in 0..BOARD_SIZE
+        {
+            print(" ");
+            print(self.board[i * BOARD_SIZE + j]);
+            if j < BOARD_SIZE - 1
+            {
+                print(" |");
+            }
+        }
+        println("");
+        if i < BOARD_SIZE - 1
+        {
+            println("---+---+---");
+        }
+    }
+    println("");
+}
+
+fn Game.make_move(self, pos: Int) ->Bool
+{
+    if pos < 0 || pos >= BOARD_SIZE * BOARD_SIZE || self.board[pos] != EMPTY_CELL
+    {
+        println("Invalid move.");
+        return false;
+    }
+    self.board[pos] = self.currentPlayer;
+    return true;
+}
+
+fn Game.check_win(self) ->Bool
+{
+    for i in 0..BOARD_SIZE
+    {
+        if self.board[i * BOARD_SIZE] != EMPTY_CELL &&
+           self.board[i * BOARD_SIZE] == self.board[i * BOARD_SIZE + 1] &&
+           self.board[i * BOARD_SIZE + 1] == self.board[i * BOARD_SIZE + 2]
+        {
+            return true;
+        }
+    }
+
+    for i in 0..BOARD_SIZE
+    {
+        if self.board[i] != EMPTY_CELL &&
+           self.board[i] == self.board[i + BOARD_SIZE] &&
+           self.board[i + BOARD_SIZE] == self.board[i + 2 * BOARD_SIZE]
+        {
+            return true;
+        }
+    }
+
+    if self.board[0] != EMPTY_CELL &&
+       self.board[0] == self.board[4] &&
+       self.board[4] == self.board[8]
+    {
+        return true;
+    }
+
+    if self.board[2] != EMPTY_CELL &&
+       self.board[2] == self.board[4] &&
+       self.board[4] == self.board[6]
+    {
+        return true;
+    }
+
+    return false;
+}
+
+fn Game.is_draw(self) ->Bool
+{
+    for i in 0..(BOARD_SIZE * BOARD_SIZE)
+    {
+        if self.board[i] == EMPTY_CELL
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+fn Game.switch_player(self)
+{
+    if self.currentPlayer == 'X'
+    {
+        self.currentPlayer = 'O';
+    }
+    else
+    {
+        self.currentPlayer = 'X';
+    }
+}
+
+fn main()
+{
+    let game = Game {};
+
+    println("Welcome to Tic-Tac-Toe!");
+
+    while true
+    {
+        printBoard(game);
+        print("Player ");
+        print(game.current_player);
+        print(", enter your move (0-8): ");
+
+        let input = read_line();
+        let game_move: ?Int = input.toInt();
+
+        if move.is_none()
+        {
+            println("Invalid input. Please enter a number between 0 and 8.");
+            continue;
+        }
+
+        if !game.make_move(move.unwrap())
+        {
+            continue;
+        }
+
+        if game.check_win()
+        {
+            printBoard(game);
+            print("Player ");
+            print(game.current_player);
+            println(" wins!");
+            break;
+        }
+
+        if game.is_draw()
+        {
+            game.print_board();
+            println("It's a draw!");
+            break;
+        }
+
+        game.switch_player();
+    }
+}

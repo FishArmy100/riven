@@ -1,11 +1,16 @@
-pub struct CharReader
+pub struct CharReader<'a>
 {
-    chars: Vec<char>,
+    chars: &'a [char],
     index: usize,
 }
 
-impl CharReader
+impl<'a> CharReader<'a>
 {
+    pub fn new(chars: &'a [char]) -> Self 
+    {
+        Self { chars, index: 0 }
+    }
+
     pub fn chars(&self) -> &[char]
     {
         &self.chars
@@ -16,17 +21,6 @@ impl CharReader
         self.index
     }
 
-    pub fn new(text: &str) -> Option<Self>
-    {
-        if text.len() == 0 { return None; }
-
-        Some(Self 
-        {
-            chars: text.chars().collect(),
-            index: 0,
-        })
-    }
-
     pub fn peek(&self, count: usize) -> Option<char>
     {
         if self.index + count < self.chars.len()
@@ -35,7 +29,7 @@ impl CharReader
         }
         else 
         {
-            None    
+            None
         }
     }
 

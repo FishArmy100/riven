@@ -35,6 +35,7 @@ pub enum TokenType
     True,
     Use,
     While,
+    Null,
 
     // Tokens
     OpenParen,
@@ -71,6 +72,7 @@ pub enum TokenType
     ThickArrow,
 
     Dot,
+    DotDot,
     AndAnd,
     PipePipe,
     Pipe,

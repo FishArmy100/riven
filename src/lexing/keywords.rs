@@ -21,6 +21,7 @@ pub const KW_STRUCT:    &str = "struct";
 pub const KW_TRUE:      &str = "true";
 pub const KW_USE:       &str = "use";
 pub const KW_WHILE:     &str = "while";
+pub const KW_NULL:      &str = "null";
 
 lazy_static::lazy_static! 
 {
@@ -43,6 +44,7 @@ lazy_static::lazy_static!
         map.insert(KW_TRUE.into(), TokenType::True);
         map.insert(KW_USE.into(), TokenType::Use);
         map.insert(KW_WHILE.into(), TokenType::While);
+        map.insert(KW_NULL.into(), TokenType::Null);
         map
     };
 }

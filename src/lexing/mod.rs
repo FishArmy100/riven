@@ -45,36 +45,11 @@ impl CompilerError for LexerError
     }
 }
 
-#[derive(Debug)]
-pub struct LexerResult
-{
-    pub text: Vec<char>,
-    pub tokens: Vec<Token>,
-    pub errors: Vec<LexerError>,
-}
+pub type LexerResult = Result<Vec<Token>, Vec<LexerError>>;
 
-impl LexerResult
+pub fn lex_text(text: &[char]) -> LexerResult
 {
-    pub fn is_err(&self) -> bool
-    {
-        self.errors.len() > 0
-    }
-
-    pub fn is_ok(&self) -> bool 
-    {
-        !self.is_err()
-    }
-}
-
-pub fn lex_text(text: &str) -> LexerResult
-{
-    let Some(mut reader) = CharReader::new(text) else {
-        return LexerResult {
-            text: vec![],
-            tokens: vec![Token { token_type: TokenType::EOF, pos: 0.into(), value: None }],
-            errors: vec![]
-        };
-    };
+    let mut reader = CharReader::new(text);
 
     let mut tokens = vec![];
     let mut errors = vec![];
@@ -124,7 +99,14 @@ pub fn lex_text(text: &str) -> LexerResult
         value: None,
     });
 
-    LexerResult { text: reader.chars().to_vec(), tokens, errors }
+    if errors.len() > 0
+    {
+        Err(errors)
+    }
+    else 
+    {
+        Ok(tokens)    
+    }
 }
 
 pub fn lex_comments(reader: &mut CharReader) -> bool
@@ -260,7 +242,16 @@ pub fn check_symbol(reader: &mut CharReader) -> Option<Token>
             }
         },
 
-        '.' => Some(make_token(reader, 1, TokenType::Dot)),
+        '.' => {
+            if reader.peek(1).is_some_and(|c| c == '.')
+            {
+                Some(make_token(reader, 2, TokenType::DotDot))
+            }
+            else 
+            {
+                Some(make_token(reader, 1, TokenType::Dot))    
+            }
+        },
         ',' => Some(make_token(reader, 1, TokenType::Comma)),
         ';' => Some(make_token(reader, 1, TokenType::SemiColon)),
         ':' => Some(make_token(reader, 1, TokenType::Colon)),
