@@ -4,6 +4,7 @@ pub mod lexing;
 pub mod utils;
 pub mod compiler;
 pub mod parsing;
+pub mod validation;
 
 fn main() 
 {

@@ -22,8 +22,7 @@ pub enum TypeName
         open_paren: Token,
         parameter_types: Vec<TypeName>,
         close_paren: Token,
-        arrow: Token,
-        return_type: Box<TypeName>,
+        return_type: Option<(Token, Box<TypeName>)>,
     },
     Optional 
     {
@@ -46,9 +45,16 @@ impl TypeName
             {
                 format!("[]{}", type_name.pretty_print())
             },
-            TypeName::Function { fn_type_tok: _, open_paren: _, parameter_types, close_paren: _, arrow: _, return_type } => 
+            TypeName::Function { fn_type_tok: _, open_paren: _, parameter_types, close_paren: _, return_type } => 
             {
-                format!("Fn({}) -> {}", parameter_types.iter().map(|t| t.pretty_print()).join(", "), return_type.pretty_print())
+                let mut str = format!("Fn({})", parameter_types.iter().map(|t| t.pretty_print()).join(", "));
+
+                if let Some(returned) = return_type
+                {
+                    str += &format!(" -> {}", returned.1.pretty_print())
+                }
+
+                str
             },
             TypeName::Optional { question_mark: _, type_name } => 
             {
@@ -66,7 +72,16 @@ impl TypeName
                 name.pos
             },
             TypeName::Array { open_bracket, close_bracket: _, type_name } => open_bracket.pos + type_name.get_pos(),
-            TypeName::Function { fn_type_tok, open_paren: _, parameter_types: _, close_paren: _, arrow: _, return_type } => fn_type_tok.pos + return_type.get_pos(),
+            TypeName::Function { fn_type_tok, open_paren: _, parameter_types: _, close_paren: _, return_type } => {
+                
+                let mut pos = fn_type_tok.pos;
+                if let Some(returned) = return_type
+                {
+                    pos = pos + returned.1.get_pos()
+                }
+
+                pos
+            },
             TypeName::Optional { question_mark, type_name  } => 
             {
                 question_mark.pos + type_name.get_pos()

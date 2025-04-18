@@ -1,4 +1,4 @@
-use crate::{lexing::{self, token::{Token, TokenType}}, parsing::{self, ast::FileNode, ParserError}, utils::TextPos};
+use crate::{lexing::{self, token::{Token, TokenType}}, parsing::{self, ast::{Expression, FileNode}, token_reader::TokenReader, ParserError}, utils::TextPos};
 
 pub trait CompilerError
 {
@@ -39,6 +39,19 @@ pub fn run_parser(text: &[char], file: Option<&str>) -> Result<FileNode, Vec<Str
         }
         Err(err) => {
             Err(err.iter().map(|e| e.format_error(text, file)).collect())
+        }
+    }
+}
+
+pub fn run_expression_parser(text: &[char]) -> Result<Expression, Vec<String>>
+{
+    let tokens = run_lexer(text, None)?;
+    let mut reader = TokenReader::new(&tokens, None);
+    match parsing::expect_expression(&mut reader, parsing::parse_expression)
+    {
+        Ok(ok) => Ok(ok),
+        Err(err) => {
+            Err(vec![err.format_error(text, None)])
         }
     }
 }

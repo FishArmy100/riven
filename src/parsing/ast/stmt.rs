@@ -105,7 +105,7 @@ pub struct FnDecl
 }
 
 #[derive(Debug, Clone)]
-pub struct StructMember
+pub struct StructDeclMember
 {
     pub id: Token,
     pub colon: Token,
@@ -120,7 +120,7 @@ pub struct StructDecl
     pub struct_tok: Token,
     pub id: Token,
     pub open_brace: Token,
-    pub members: Vec<StructMember>,
+    pub members: Vec<StructDeclMember>,
     pub close_brace: Token,
 }
 

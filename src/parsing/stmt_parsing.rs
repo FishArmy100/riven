@@ -299,7 +299,7 @@ fn parse_struct_decl(reader: &mut TokenReader) -> ParserResult<Option<StructDecl
     }))
 }
 
-fn parse_struct_member(reader: &mut TokenReader) -> ParserResult<Option<StructMember>>
+fn parse_struct_member(reader: &mut TokenReader) -> ParserResult<Option<StructDeclMember>>
 {
     if !reader.is_sequence(&[TokenType::Identifier, TokenType::Colon]) 
     {
@@ -316,7 +316,7 @@ fn parse_struct_member(reader: &mut TokenReader) -> ParserResult<Option<StructMe
         Some((equal, expression))
     } else { None };
 
-    Ok(Some(StructMember {
+    Ok(Some(StructDeclMember {
         id,
         colon, 
         type_name, 

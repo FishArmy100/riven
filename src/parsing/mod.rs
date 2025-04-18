@@ -66,7 +66,7 @@ pub type ParserResult<T> = Result<T, ParserError>;
 
 pub fn parse_file(tokens: &Vec<Token>) -> Result<Option<FileNode>, Vec<ParserError>>
 {
-    let Some(mut reader) = TokenReader::new(tokens, None) else { return Ok(None) };
+    let mut reader = TokenReader::new(tokens, None);
     let mut usings = vec![];
     let mut declarations = vec![];
     let mut errors = vec![];

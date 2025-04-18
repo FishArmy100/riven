@@ -5,9 +5,7 @@ use super::{token_reader::TokenReader, ParserError, ParserResult};
 
 pub fn peek_type(reader: &TokenReader) -> Option<(TypeName, usize)>
 {
-    let Some(mut type_reader) = TokenReader::new(reader.tokens(), Some(reader.index())) else {
-        return None;
-    };
+    let mut type_reader = TokenReader::new(reader.tokens(), Some(reader.index()));
 
     match parse_type_name(&mut type_reader)
     {
@@ -18,9 +16,7 @@ pub fn peek_type(reader: &TokenReader) -> Option<(TypeName, usize)>
 
 pub fn is_type(reader: &TokenReader) -> Option<usize>
 {
-    let Some(mut type_reader) = TokenReader::new(reader.tokens(), Some(reader.index())) else {
-        return None;
-    };
+    let mut type_reader = TokenReader::new(reader.tokens(), Some(reader.index()));
 
     match parse_type_name(&mut type_reader)
     {
@@ -32,9 +28,7 @@ pub fn is_type(reader: &TokenReader) -> Option<usize>
 pub fn is_type_and<F>(reader: &TokenReader, f: F) -> Option<usize>
     where F : Fn(&TypeName) -> bool
 {
-    let Some(mut type_reader) = TokenReader::new(reader.tokens(), Some(reader.index())) else {
-        return None;
-    };
+    let mut type_reader = TokenReader::new(reader.tokens(), Some(reader.index()));
 
     match parse_type_name(&mut type_reader)
     {
@@ -118,17 +112,17 @@ fn parse_fn_type(reader: &mut TokenReader) -> ParserResult<TypeName>
 
     let close_paren = reader.expect(TokenType::CloseParen)?;
 
-    let arrow = reader.expect(TokenType::ThinArrow)?;
-    let Some(return_type) = parse_type_name(reader)? else {
-        return Err(ParserError::ExpectedType(reader.current()))
-    };
+
+    let return_type = if let Some(arrow) = reader.check(TokenType::ThinArrow) {
+        let type_name = expect_type_name(reader)?;
+        Some((arrow, Box::new(type_name)))
+    } else { None };
 
     Ok(TypeName::Function { 
         fn_type_tok, 
         open_paren, 
         parameter_types, 
         close_paren, 
-        arrow, 
-        return_type: Box::new(return_type)
+        return_type,
     })
 }

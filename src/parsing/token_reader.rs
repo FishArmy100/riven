@@ -11,14 +11,12 @@ pub struct TokenReader<'a>
 
 impl<'a> TokenReader<'a>
 {
-    pub fn new(tokens: &'a [Token], start_index: Option<usize>) -> Option<Self>
+    pub fn new(tokens: &'a [Token], start_index: Option<usize>) -> Self
     {
-        if tokens.len() == 0 || start_index.is_some_and(|s| s >= tokens.len()) { return None };
-
-        Some(Self {
+        Self {
             tokens,
             index: start_index.map_or(0, |v| v)
-        })
+        }
     }
 
     pub fn index(&self) -> usize
