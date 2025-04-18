@@ -1,4 +1,4 @@
-use std::{fs::{create_dir_all, File, OpenOptions}, io::{Read, Write}, iter::Sum, ops::Add};
+use std::{fs::{create_dir_all, File, OpenOptions}, io::{Read, Write}, ops::Add};
 
 pub fn read_file(path: &str) -> Result<String, String> 
 {

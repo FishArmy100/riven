@@ -66,7 +66,9 @@ pub struct BlockStmt
 pub struct IfStmt
 {
     pub if_tok: Token,
+    pub open_paren: Token,
     pub condition: Expression,
+    pub close_paren: Token,
     pub block: BlockStmt,
     pub else_branch: Option<ElseBranch>
 }
@@ -92,6 +94,7 @@ pub struct FnDecl
 {
     pub pub_tok: Option<Token>,
     pub fn_tok: Token,
+    pub type_name: Option<(Token, TypeName)>,
     pub id: Token,
     pub open_paren: Token,
     pub self_param: Option<Token>,
@@ -147,9 +150,11 @@ pub struct ReturnStmt
 pub struct ForStmt
 {
     pub for_tok: Token,
+    pub open_paren: Token,
     pub id_tok: Token,
     pub in_tok: Token,
     pub expression: Expression,
+    pub close_paren: Token,
     pub body: Box<BlockStmt>,
 }
 
@@ -157,7 +162,9 @@ pub struct ForStmt
 pub struct WhileStmt
 {
     pub while_tok: Token,
+    pub open_paren: Token,
     pub condition: Expression,
+    pub close_paren: Token,
     pub body: Box<BlockStmt>,
 }
 

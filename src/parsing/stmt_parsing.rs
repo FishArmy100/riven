@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use either::Either;
 
-use crate::lexing::token::{Token, TokenType, ASSIGNMENT_TOKENS};
-use super::{ast::*, expect_ast_item};
+use crate::lexing::token::{TokenType, ASSIGNMENT_TOKENS};
+use super::{ast::*, expect_ast_item, is_type};
 
 use super::{expect_expression, expect_type_name, is_expression_and, parse_expression, token_reader::TokenReader, ParserError, ParserResult};
 
@@ -131,7 +131,9 @@ pub fn parse_if(reader: &mut TokenReader) -> ParserResult<Option<IfStmt>>
 {
     if let Some(if_tok) = reader.check(TokenType::If)
     {
+        let open_paren = reader.expect(TokenType::OpenParen)?;
         let condition = expect_expression(reader, parse_expression)?;
+        let close_paren = reader.expect(TokenType::CloseParen)?;
         let block = expect_block_stmt(reader)?;
 
         if let Some(else_tok) = reader.check(TokenType::Else)
@@ -150,7 +152,9 @@ pub fn parse_if(reader: &mut TokenReader) -> ParserResult<Option<IfStmt>>
 
             Ok(Some(IfStmt { 
                 if_tok, 
-                condition, 
+                open_paren,
+                condition,
+                close_paren, 
                 block, 
                 else_branch: Some(else_branch)
             }))
@@ -159,7 +163,9 @@ pub fn parse_if(reader: &mut TokenReader) -> ParserResult<Option<IfStmt>>
         {
             Ok(Some(IfStmt { 
                 if_tok, 
+                open_paren,
                 condition, 
+                close_paren,
                 block, 
                 else_branch: None
             }))
@@ -175,9 +181,17 @@ fn parse_while(reader: &mut TokenReader) -> ParserResult<Option<WhileStmt>>
 {
     if let Some(while_tok) = reader.check(TokenType::While)
     {
+        let open_paren = reader.expect(TokenType::OpenParen)?;
         let condition = expect_expression(reader, parse_expression)?;
+        let close_paren = reader.expect(TokenType::CloseParen)?;
         let body = expect_block_stmt(reader)?;
-        Ok(Some(WhileStmt { while_tok, condition, body: Box::new(body) }))
+        Ok(Some(WhileStmt { 
+            while_tok, 
+            open_paren,
+            condition, 
+            close_paren,
+            body: Box::new(body) 
+        }))
     }
     else 
     {
@@ -191,12 +205,22 @@ fn parse_for(reader: &mut TokenReader) -> ParserResult<Option<ForStmt>>
         return Ok(None)
     };
 
+    let open_paren = reader.expect(TokenType::OpenParen)?;
     let id_tok = reader.expect(TokenType::Identifier)?;
     let in_tok = reader.expect(TokenType::In)?;
     let expression = expect_expression(reader, parse_expression)?;
+    let close_paren = reader.expect(TokenType::CloseParen)?;
     let body = expect_block_stmt(reader)?;
 
-    Ok(Some(ForStmt { for_tok, id_tok, in_tok, expression, body: Box::new(body) }))
+    Ok(Some(ForStmt { 
+        for_tok, 
+        open_paren,
+        id_tok, 
+        in_tok, 
+        expression,
+        close_paren, 
+        body: Box::new(body) 
+    }))
 }
 
 fn parse_break(reader: &mut TokenReader) -> ParserResult<Option<BreakStmt>>
@@ -262,6 +286,7 @@ fn parse_struct_decl(reader: &mut TokenReader) -> ParserResult<Option<StructDecl
         if reader.check(TokenType::Comma).is_none() { break; }
     }
 
+    reader.check(TokenType::Comma);
     let close_brace = reader.expect(TokenType::CloseBrace)?;
 
     Ok(Some(StructDecl { 
@@ -276,6 +301,11 @@ fn parse_struct_decl(reader: &mut TokenReader) -> ParserResult<Option<StructDecl
 
 fn parse_struct_member(reader: &mut TokenReader) -> ParserResult<Option<StructMember>>
 {
+    if !reader.is_sequence(&[TokenType::Identifier, TokenType::Colon]) 
+    {
+        return Ok(None);
+    }
+
     let id = reader.expect(TokenType::Identifier)?;
 
     let colon = reader.expect(TokenType::Colon)?;
@@ -308,6 +338,16 @@ fn parse_fn_decl(reader: &mut TokenReader) -> ParserResult<Option<FnDecl>>
         return Ok(None) 
     };
 
+    let type_name = if let Some(offset) = is_type(reader) {
+        if reader.peek_is(offset, TokenType::Dot)
+        {
+            let type_name = expect_type_name(reader)?;
+            let dot = reader.expect(TokenType::Dot)?;
+            Some((dot, type_name))
+        }
+        else { None }
+    } else { None };
+
     let id = reader.expect(TokenType::Identifier)?;
 
     let open_paren = reader.expect(TokenType::OpenParen)?;
@@ -318,6 +358,8 @@ fn parse_fn_decl(reader: &mut TokenReader) -> ParserResult<Option<FnDecl>>
     {
         return Err(ParserError::ExpectedToken(TokenType::Comma, reader.current()))
     }
+
+    reader.check(TokenType::Comma); // advance past the comma
 
     while let Some(param) = parse_fn_param(reader)?
     {
@@ -336,6 +378,7 @@ fn parse_fn_decl(reader: &mut TokenReader) -> ParserResult<Option<FnDecl>>
     Ok(Some(FnDecl { 
         pub_tok,
         fn_tok, 
+        type_name,
         id, 
         open_paren, 
         self_param,
@@ -468,6 +511,7 @@ pub fn parse_use_stmt(reader: &mut TokenReader) -> ParserResult<Option<UseStmt>>
         while let Some(id) = reader.check(TokenType::Identifier)
         {
             ids.push(id);
+            if reader.check(TokenType::Dot).is_none() { break; }
         }
 
         if ids.len() == 0

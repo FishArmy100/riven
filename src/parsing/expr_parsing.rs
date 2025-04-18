@@ -1,9 +1,7 @@
-use either::Either;
-
 use crate::lexing::token::TokenType;
 use self::ast::{AccessExpr, CallExpr, Expression, IndexExpr, UnaryExpr};
 
-use super::{stmt_parsing::{parse_block_stmt, parse_statement}, *};
+use super::{stmt_parsing::parse_block_stmt, *};
 
 pub fn is_expression_and<F>(reader: &mut TokenReader, f: F) -> Option<Expression>
     where F : Fn(&TokenReader) -> bool
@@ -177,6 +175,10 @@ fn parse_primary(reader: &mut TokenReader) -> ParserResult<Option<Expression>>
     {
         Ok(Some(lambda))
     }
+    else if let Some(type_value) = parse_type_value(reader)?
+    {
+        Ok(Some(type_value))
+    }
     else if let Some(array) = parse_array_literal(reader)?
     {
         Ok(Some(array))
@@ -218,8 +220,7 @@ fn parse_construction_expression(reader: &mut TokenReader) -> ParserResult<Optio
 {
     if let Some(offset) = is_type(reader)
     {
-        if reader.peek_sequence_is(offset, &[TokenType::OpenBrace, TokenType::Identifier, TokenType::Colon]) || 
-           reader.peek_sequence_is(offset, &[TokenType::OpenBrace, TokenType::CloseBrace])
+        if reader.peek_is(offset, TokenType::OpenBrace)
         {
             let type_name = parse_type_name(reader)?.unwrap();
             let open_brace = reader.expect(TokenType::OpenBrace)?;
@@ -247,6 +248,27 @@ fn parse_construction_expression(reader: &mut TokenReader) -> ParserResult<Optio
             };
 
             return Ok(Some(Expression::Construction(expr)));
+        }
+    }
+
+    Ok(None)
+}
+
+fn parse_type_value(reader: &mut TokenReader) -> ParserResult<Option<Expression>>
+{
+    if let Some(offset) = is_type(reader)
+    {
+        if reader.peek_is(offset, TokenType::Dot)
+        {
+            let type_name = expect_type_name(reader)?;
+            let dot = reader.expect(TokenType::Dot)?;
+            let id = reader.expect(TokenType::Identifier)?;
+
+            return Ok(Some(Expression::TypeValue(TypeValueExpr { 
+                type_name, 
+                dot, 
+                id 
+            })));
         }
     }
 

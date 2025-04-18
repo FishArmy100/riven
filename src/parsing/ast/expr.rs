@@ -111,7 +111,7 @@ pub struct TypeValueExpr
 {
     pub type_name: TypeName,
     pub dot: Token,
-    pub name: Token,
+    pub id: Token,
 }
 
 #[derive(Debug, Clone)]
@@ -187,7 +187,7 @@ impl Expression
             Expression::Identifier(token) => token.pos,
             Expression::Grouping(group) => group.open_paren.pos + group.close_paren.pos,
             Expression::SelfExpr(token) => token.pos,
-            Expression::TypeValue(expr) => expr.name.pos + expr.type_name.get_pos(),
+            Expression::TypeValue(expr) => expr.id.pos + expr.type_name.get_pos(),
             Expression::Construction(expr) => expr.type_name.get_pos() + expr.close_brace.pos,
             Expression::Call(call) => call.expression.get_pos() + call.close_paren.pos,
             Expression::Access(access) => access.expression.get_pos() + access.identifier.pos,

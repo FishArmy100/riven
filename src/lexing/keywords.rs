@@ -41,6 +41,7 @@ lazy_static::lazy_static!
         map.insert(KW_RETURN.into(), TokenType::Return);
         map.insert(KW_PUB.into(), TokenType::Pub);
         map.insert(KW_STRUCT.into(), TokenType::Struct);
+        map.insert(KW_SELF.into(), TokenType::SelfVal);
         map.insert(KW_TRUE.into(), TokenType::True);
         map.insert(KW_USE.into(), TokenType::Use);
         map.insert(KW_WHILE.into(), TokenType::While);
