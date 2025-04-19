@@ -1,4 +1,4 @@
-use crate::{lexing::{self, token::{Token, TokenType}}, parsing::{self, ast::{Expression, FileNode}, token_reader::TokenReader, ParserError}, utils::TextPos};
+use crate::{lexing::{self, token::{Token, TokenType}}, parsing::{self, ast::{Expression, FileNode}, token_reader::TokenReader, ParserError}, utils::{PathInfo, TextPos}};
 
 pub trait CompilerError
 {
@@ -15,31 +15,30 @@ pub trait CompilerError
     }
 }
 
-pub fn run_lexer(text: &[char], file: Option<&str>) -> Result<Vec<Token>, Vec<String>>
+pub fn run_lexer(text: &[char], file: Option<&PathInfo>) -> Result<Vec<Token>, Vec<String>>
 {
     match lexing::lex_text(text)
     {
         Ok(ok) => Ok(ok),
         Err(err) => {
-            Err(err.iter().map(|e| e.format_error(text, file)).collect())
+            Err(err.iter().map(|e| e.format_error(text, file.map(|p| p.full_path.as_str()))).collect())
         },
     }
 }
 
-pub fn run_parser(text: &[char], file: Option<&str>) -> Result<FileNode, Vec<String>>
+pub fn run_parser(text: &[char], path: Option<PathInfo>) -> Result<FileNode, Vec<String>>
 {
-    let tokens = run_lexer(text, file)?;
-    let path = vec![];
+    let tokens = run_lexer(text, path.as_ref())?;
 
-    match parsing::parse_file(&tokens, path)
+    match parsing::parse_file(&tokens, path.clone())
     {
         Ok(Some(ok)) => Ok(ok),
         Ok(None) => {
-            let error = ParserError::ExpectedToken(TokenType::EOF, None).format_error(text, file);
+            let error = ParserError::ExpectedToken(TokenType::EOF, None).format_error(text, path.as_ref().map(|p| p.full_path.as_str()));
             Err(vec![error])
         }
         Err(err) => {
-            Err(err.iter().map(|e| e.format_error(text, file)).collect())
+            Err(err.iter().map(|e| e.format_error(text, path.as_ref().map(|p| p.full_path.as_str()))).collect())
         }
     }
 }

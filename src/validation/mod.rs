@@ -48,22 +48,24 @@ pub struct TypeLibrary
 
 impl TypeLibrary
 {
-    pub fn new() -> Self 
-    {
-        let types: HashMap<_, _> = builtins::get_builtin_types().into_iter().map(|t| (t.id.clone(), t)).collect();
-        let mut files = HashMap::<Vec<String>, HashMap<String, Uuid>>::new();
-        files.insert(vec![], types.values().map(|t| (t.name.clone(), t.id.clone())).collect());
+    
+}
 
-        Self 
-        {
-            types,
-            files: HashMap::new()
-        }
-    }
+pub struct TypeLibraryBuilder<'a>
+{
+    type_id_map: HashMap<Vec<String>, HashMap<String, Uuid>>,
+    files: HashMap<Vec<String>, &'a FileNode>,
+    errors: Vec<TypeError>
+}
 
-    pub fn push_file(&mut self, node: &FileNode)
+impl<'a> TypeLibraryBuilder<'a>
+{
+    pub fn append_file(self, node: &FileNode) -> Self 
     {
-        
+        let path = node.path.as_ref().map_or(vec![], |p| p.split_relative());
+
+
+        self
     }
 }
 

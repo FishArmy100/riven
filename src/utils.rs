@@ -1,4 +1,4 @@
-use std::{fs::{create_dir_all, File, OpenOptions}, io::{Read, Write}, ops::Add};
+use std::{fs::{create_dir_all, File, OpenOptions}, io::{Read, Write}, ops::Add, path::Path};
 
 pub fn read_file(path: &str) -> Result<String, String> 
 {
@@ -151,5 +151,32 @@ pub fn partition_errors<T, E>(results: impl IntoIterator<Item = Result<T, E>>) -
     else 
     {
         Err(errs)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PathInfo
+{
+    pub full_path: String,
+    pub relative_path: String,
+}
+
+impl PathInfo
+{
+    pub fn split_relative(&self) -> Vec<String>
+    {
+        let path = Path::new(&self.relative_path);
+        let mut parts: Vec<String> = Vec::new();
+
+        for component in path.parent().unwrap_or_else(|| Path::new("")).components() {
+            parts.push(component.as_os_str().to_string_lossy().to_string());
+        }
+
+        // Add file stem (filename without extension) if it exists
+        if let Some(stem) = path.file_stem() {
+            parts.push(stem.to_string_lossy().to_string());
+        }
+
+        parts
     }
 }

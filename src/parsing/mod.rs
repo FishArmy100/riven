@@ -9,7 +9,7 @@ pub use type_parsing::*;
 pub use expr_parsing::*;
 
 use token_reader::TokenReader;
-use crate::{compiler::CompilerError, lexing::token::{Token, TokenType}};
+use crate::{compiler::CompilerError, lexing::token::{Token, TokenType}, utils::PathInfo};
 use self::ast::*;
 use crate::utils::TextPos;
 
@@ -64,7 +64,7 @@ impl CompilerError for ParserError
 
 pub type ParserResult<T> = Result<T, ParserError>;
 
-pub fn parse_file(tokens: &Vec<Token>, path: Vec<String>) -> Result<Option<FileNode>, Vec<ParserError>>
+pub fn parse_file(tokens: &Vec<Token>, path: Option<PathInfo>) -> Result<Option<FileNode>, Vec<ParserError>>
 {
     let mut reader = TokenReader::new(tokens, None);
     let mut usings = vec![];
