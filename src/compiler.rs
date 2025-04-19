@@ -29,8 +29,9 @@ pub fn run_lexer(text: &[char], file: Option<&str>) -> Result<Vec<Token>, Vec<St
 pub fn run_parser(text: &[char], file: Option<&str>) -> Result<FileNode, Vec<String>>
 {
     let tokens = run_lexer(text, file)?;
+    let path = vec![];
 
-    match parsing::parse_file(&tokens)
+    match parsing::parse_file(&tokens, path)
     {
         Ok(Some(ok)) => Ok(ok),
         Ok(None) => {

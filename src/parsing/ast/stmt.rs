@@ -195,6 +195,7 @@ pub enum Declaration
 #[derive(Debug)]
 pub struct FileNode
 {
+    pub path: Vec<String>,
     pub usings: Vec<UseStmt>,
     pub declarations: Vec<Declaration>,
     pub eof: Token,

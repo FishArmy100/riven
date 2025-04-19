@@ -191,6 +191,7 @@ fn parse_primary(reader: &mut TokenReader) -> ParserResult<Option<Expression>>
         TokenType::SelfVal,
         TokenType::True,
         TokenType::False,
+        TokenType::Null,
     ])
     {
         Ok(Some(Expression::Literal(literal)))

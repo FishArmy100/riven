@@ -1,8 +1,12 @@
 pub mod ast;
+pub mod type_info;
+pub mod builtins;
+pub mod operators;
 
 use std::collections::HashMap;
 
 use itertools::Itertools;
+use type_info::TypeInfo;
 use uuid::Uuid;
 
 use crate::{compiler::CompilerError, lexing::token::{Token, TokenType}, parsing::ast::{Declaration, FileNode, TypeName}, utils::TextPos};
@@ -35,49 +39,31 @@ impl CompilerError for TypeError
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum TypeInfo
+
+pub struct TypeLibrary
 {
-    Primary(Uuid),
-    Optional(Box<TypeInfo>),
-    Array(Box<TypeInfo>),
-    Function
-    {
-        args: Vec<TypeInfo>,
-        returned: Option<Box<TypeInfo>>,
-    }
+    types: HashMap<Uuid, StructDef>,
+    files: HashMap<Vec<String>, HashMap<String, Uuid>>,
 }
 
-impl TypeInfo
+impl TypeLibrary
 {
-    pub fn from(type_name: &TypeName, structs: &HashMap<String, Uuid>) -> Result<Self, TypeError>
+    pub fn new() -> Self 
     {
-        match type_name
+        let types: HashMap<_, _> = builtins::get_builtin_types().into_iter().map(|t| (t.id.clone(), t)).collect();
+        let mut files = HashMap::<Vec<String>, HashMap<String, Uuid>>::new();
+        files.insert(vec![], types.values().map(|t| (t.name.clone(), t.id.clone())).collect());
+
+        Self 
         {
-            TypeName::Identifier(token) => {
-                let Some(id) = structs.get(token.value_string().unwrap()) else {
-                    return Err(TypeError::UnknownType(token.clone()))
-                };
-                
-                Ok(Self::Primary(id.clone()))
-            },
-            TypeName::Array { open_bracket: _, close_bracket: _, type_name } => {
-                let inner = Self::from(type_name, structs)?;
-                Ok(Self::Array(Box::new(inner)))
-            },
-            TypeName::Function { fn_type_tok: _, open_paren: _, parameter_types, close_paren: _, return_type } => {
-                let args = parameter_types.iter().map(|p| TypeInfo::from(p, structs)).collect::<Result<_, _>>()?;
-                let returned = return_type.as_ref().map(|r| TypeInfo::from(&r.1, structs));
-
-                if let Some(Err(err)) = returned { return Err(err) }
-
-                Ok(Self::Function { args, returned: returned.map(|r| Box::new(r.unwrap())) })
-            },
-            TypeName::Optional { question_mark: _, type_name } => {
-                let inner = Self::from(type_name, structs)?;
-                Ok(Self::Optional(Box::new(inner)))
-            },
+            types,
+            files: HashMap::new()
         }
+    }
+
+    pub fn push_file(&mut self, node: &FileNode)
+    {
+        
     }
 }
 
