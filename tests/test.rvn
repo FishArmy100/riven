@@ -1,0 +1,8 @@
+
+pub struct String {}
+
+struct Game
+{
+    board: []String,
+    current_player: String,
+}

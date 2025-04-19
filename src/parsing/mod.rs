@@ -79,7 +79,7 @@ pub fn parse_file(tokens: &Vec<Token>) -> Result<Option<FileNode>, Vec<ParserErr
             Ok(None) => break,
             Err(err) => {
                 errors.push(err);
-                reader.synchronize(&[TokenType::EOF, TokenType::Use, TokenType::Const, TokenType::Fn, TokenType::Struct]);
+                reader.synchronize(&[TokenType::EOF, TokenType::Pub, TokenType::Use, TokenType::Const, TokenType::Fn, TokenType::Struct]);
             },
         }
     }
@@ -92,7 +92,7 @@ pub fn parse_file(tokens: &Vec<Token>) -> Result<Option<FileNode>, Vec<ParserErr
             Ok(None) => break,
             Err(err) => {
                 errors.push(err);
-                reader.synchronize(&[TokenType::EOF, TokenType::Const, TokenType::Fn, TokenType::Struct]);
+                reader.synchronize(&[TokenType::EOF, TokenType::Pub, TokenType::Const, TokenType::Fn, TokenType::Struct]);
             },
         }
     }

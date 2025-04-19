@@ -326,7 +326,7 @@ fn parse_struct_member(reader: &mut TokenReader) -> ParserResult<Option<StructDe
 
 fn parse_fn_decl(reader: &mut TokenReader) -> ParserResult<Option<FnDecl>>
 {
-    let pub_tok = if reader.is_sequence(&[TokenType::Pub, TokenType::Struct]) { reader.advance() } else { None };
+    let pub_tok = if reader.is_sequence(&[TokenType::Pub, TokenType::Fn]) { reader.advance() } else { None };
 
     let Some(fn_tok) = reader.check(TokenType::Fn) else { 
 
@@ -452,7 +452,7 @@ fn parse_let(reader: &mut TokenReader) -> ParserResult<Option<LetStmt>>
 
 fn parse_const(reader: &mut TokenReader) -> ParserResult<Option<ConstStmt>>
 {
-    let pub_tok = if reader.is_sequence(&[TokenType::Pub, TokenType::Struct]) { reader.advance() } else { None };
+    let pub_tok = if reader.is_sequence(&[TokenType::Pub, TokenType::Const]) { reader.advance() } else { None };
 
     if let Some(const_tok) = reader.check(TokenType::Const)
     {

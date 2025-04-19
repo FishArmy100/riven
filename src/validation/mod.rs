@@ -2,14 +2,16 @@ pub mod ast;
 
 use std::collections::HashMap;
 
+use itertools::Itertools;
 use uuid::Uuid;
 
-use crate::{compiler::CompilerError, lexing::token::Token, parsing::ast::{Declaration, FileNode, TypeName}, utils::TextPos};
+use crate::{compiler::CompilerError, lexing::token::{Token, TokenType}, parsing::ast::{Declaration, FileNode, TypeName}, utils::TextPos};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TypeError
 {
-    UnknownType(Token)
+    UnknownType(Token),
+    DuplicateTypeDef(Token),
 }
 
 impl CompilerError for TypeError
@@ -19,6 +21,7 @@ impl CompilerError for TypeError
         match self 
         {
             TypeError::UnknownType(token) => format!("Unknown type {}", token.value_string().unwrap()),
+            TypeError::DuplicateTypeDef(token) => format!("Duplicate type {}", token.value_string().unwrap()),
         }
     }
 
@@ -27,6 +30,7 @@ impl CompilerError for TypeError
         match self 
         {
             TypeError::UnknownType(token) => Some(token.pos),
+            TypeError::DuplicateTypeDef(token) => Some(token.pos),
         }
     }
 }
@@ -77,6 +81,7 @@ impl TypeInfo
     }
 }
 
+#[derive(Debug)]
 pub struct StructMember
 {
     pub name: String,
@@ -84,17 +89,91 @@ pub struct StructMember
     pub expression: Option<()>,
 }
 
+#[derive(Debug)]
 pub struct StructDef
 {
     pub id: Uuid,
     pub name: String,
-    pub members: Vec<StructMember>
+    pub members: Vec<StructMember>,
+    pub is_pub: bool,
 }
 
-fn find_struct_names(node: FileNode) -> HashMap<String, Uuid>
+impl StructDef
 {
+    pub fn get_defs(file: &FileNode) -> Result<Vec<StructDef>, Vec<TypeError>>
+    {
+        let names = find_struct_names(&file)?;
+        let decls = file.declarations.iter().filter_map(|d| match d {
+            Declaration::Struct(s) => Some(s),
+            _ => None,
+        }).map(|d| {
+            let name = d.id.value_string().unwrap().clone();
+            let id = names.get(&name).unwrap().clone();
+            let members = d.members.iter().map(|m| -> Result<StructMember, TypeError> {
+                let name = m.id.value_string().unwrap().clone();
+                let type_info = TypeInfo::from(&m.type_name, &names)?;
+                let expression = None;
+                Ok(StructMember {
+                    name,
+                    type_info,
+                    expression,
+                })
+            }).collect_vec();
+
+            let errors = members.iter().filter_map(|r| r.as_ref().err().cloned()).collect_vec();
+            if errors.len() > 0
+            {
+                Err(errors)
+            }
+            else 
+            {
+                Ok(StructDef {
+                    name,
+                    id,
+                    members: members.into_iter().filter_map(|m| m.ok()).collect_vec(),
+                    is_pub: d.pub_tok.is_some()
+                })    
+            }
+        }).collect_vec();
+
+        let errors = decls.iter().flat_map(|d| d.as_ref().err()).flatten().map(|e| e.clone()).collect_vec();
+        if errors.len() > 0
+        {
+            Err(errors)
+        }
+        else 
+        {
+            Ok(decls.into_iter().flat_map(|d| d.ok()).collect_vec())
+        }
+    }
+}
+
+fn find_struct_names(node: &FileNode) -> Result<HashMap<String, Uuid>, Vec<TypeError>>
+{
+    let mut name_map = HashMap::new();
+    let mut errors = Vec::new();
+
     node.declarations.iter().filter_map(|d| match d {
-        Declaration::Struct(s) => Some(s.id.value_string().unwrap().clone()),
+        Declaration::Struct(s) => Some(s),
         _ => None,
-    }).map(|n| (n, Uuid::new_v4())).collect()
+    }).for_each(|d| {
+        let name = d.id.value_string().unwrap();
+        if name_map.contains_key(name)
+        {
+            errors.push(TypeError::DuplicateTypeDef(d.id.clone()));
+        }
+        else 
+        {
+            name_map.insert(name.clone(), Uuid::new_v4());
+        }
+    });
+
+    if errors.len() > 0
+    {
+        Err(errors)
+    }
+    else 
+    {
+        Ok(name_map)    
+    }
 }
