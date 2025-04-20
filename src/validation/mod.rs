@@ -60,12 +60,27 @@ pub struct TypeLibraryBuilder<'a>
 
 impl<'a> TypeLibraryBuilder<'a>
 {
-    pub fn append_file(self, node: &FileNode) -> Self 
+    pub fn append_file(mut self, node: &'a FileNode) -> Self 
     {
         let path = node.path.as_ref().map_or(vec![], |p| p.split_relative());
+        self.files.insert(path.clone(), node);
 
+        match find_struct_names(node)
+        {
+            Ok(ok) => {
+                self.type_id_map.insert(path, ok);
+            },
+            Err(err) => {
+                self.errors.extend(err);
+            },
+        }
 
         self
+    }
+
+    pub fn build(self) -> Result<TypeLibrary, Vec<TypeError>>
+    {
+        
     }
 }
 
