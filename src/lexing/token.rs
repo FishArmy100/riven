@@ -1,3 +1,5 @@
+use uuid::Uuid;
+
 use crate::utils::{TextLoc, TextPos};
 
 
@@ -143,7 +145,8 @@ pub struct Token
 {
     pub pos: TextPos,
     pub token_type: TokenType,
-    pub value: Option<TokenValue>
+    pub value: Option<TokenValue>,
+    pub file_id: Option<Uuid>
 }
 
 impl Token 

@@ -1,5 +1,7 @@
 use std::{fs::{create_dir_all, File, OpenOptions}, io::{Read, Write}, ops::Add, path::Path};
 
+use uuid::Uuid;
+
 pub fn read_file(path: &str) -> Result<String, String> 
 {
     let Ok(mut file) = File::open(path) else {
@@ -178,5 +180,24 @@ impl PathInfo
         }
 
         parts
+    }
+}
+
+pub struct FileInfo 
+{
+    pub id: Uuid,
+    pub path: PathInfo,
+    pub chars: Vec<char>,
+}
+
+impl FileInfo
+{
+    pub fn new(src: String, path: PathInfo) -> Self 
+    {
+        FileInfo { 
+            id: Uuid::new_v4(), 
+            path: (), 
+            chars: () 
+        }
     }
 }

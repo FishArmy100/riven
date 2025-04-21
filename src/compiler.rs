@@ -1,13 +1,17 @@
+use std::collections::HashMap;
+
+use uuid::Uuid;
+
 use crate::{lexing::{self, token::{Token, TokenType}}, parsing::{self, ast::{Expression, FileNode}, token_reader::TokenReader, ParserError}, utils::{PathInfo, TextPos}};
 
 pub trait CompilerError
 {
     fn msg(&self) -> String;
-    fn pos(&self) -> Option<TextPos>;
+    fn pos(&self) -> Option<(TextPos, Uuid)>;
 
-    fn format_error(&self, text: &[char], file: Option<&str>) -> String 
+    fn format_error(&self, files: &HashMap<Uuid, String>) -> String 
     {
-        let loc = self.pos().map(|p| p.get_loc(text).to_string()).unwrap_or("None".into());
+        let loc = self.pos().map(|(p, f)| p.get_loc(text).to_string()).unwrap_or("None".into());
         match &file {
             Some(file) => format!("[{}:{}]: {}", file.to_string(), loc, self.msg()),
             None => format!("[{}]: \"{}\"", loc, self.msg())

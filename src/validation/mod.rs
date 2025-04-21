@@ -3,19 +3,20 @@ pub mod type_info;
 pub mod builtins;
 pub mod operators;
 
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use itertools::Itertools;
 use type_info::TypeInfo;
 use uuid::Uuid;
 
-use crate::{compiler::CompilerError, lexing::token::{Token, TokenType}, parsing::ast::{Declaration, FileNode, TypeName}, utils::TextPos};
+use crate::{compiler::CompilerError, lexing::token::{Token, TokenType}, parsing::ast::{Declaration, FileNode, StructDecl, TypeName}, utils::{PathInfo, TextPos}};
 
 #[derive(Debug, Clone)]
 pub enum TypeError
 {
     UnknownType(Token),
     DuplicateTypeDef(Token),
+    UnknownUsing(Vec<Token>),
 }
 
 impl CompilerError for TypeError
@@ -26,6 +27,7 @@ impl CompilerError for TypeError
         {
             TypeError::UnknownType(token) => format!("Unknown type {}", token.value_string().unwrap()),
             TypeError::DuplicateTypeDef(token) => format!("Duplicate type {}", token.value_string().unwrap()),
+            TypeError::UnknownUsing(tokens) => format!("Using path {} does not exist", tokens.iter().map(|t| t.value_string().unwrap()).join(".")),
         }
     }
 
@@ -35,6 +37,9 @@ impl CompilerError for TypeError
         {
             TypeError::UnknownType(token) => Some(token.pos),
             TypeError::DuplicateTypeDef(token) => Some(token.pos),
+            TypeError::UnknownUsing(tokens) => {
+                tokens.iter().map(|v| v.pos).fold(None, |a, b| a.map_or(Some(b), |a| Some(a + b)))
+            },
         }
     }
 }
@@ -46,14 +51,35 @@ pub struct TypeLibrary
     files: HashMap<Vec<String>, HashMap<String, Uuid>>,
 }
 
-impl TypeLibrary
+pub struct TypeResolver
+{
+    types: HashMap<String, Uuid>
+}
+
+impl TypeResolver
+{
+    pub fn new(usings: &Vec<String>, decls: &HashMap<Vec<String>, HashMap<String, StructDeclInfo>>)
+    {
+
+    }
+}
+
+struct StructDeclInfo
+{
+    decl: Arc<StructDecl>,
+    id: Uuid,
+    name: String,
+    file: PathInfo,
+}
+
+struct StructFileInfo
 {
     
 }
 
 pub struct TypeLibraryBuilder<'a>
 {
-    type_id_map: HashMap<Vec<String>, HashMap<String, Uuid>>,
+    type_id_map: HashMap<Vec<String>, HashMap<String, StructDeclInfo>>,
     files: HashMap<Vec<String>, &'a FileNode>,
     errors: Vec<TypeError>
 }
@@ -65,15 +91,12 @@ impl<'a> TypeLibraryBuilder<'a>
         let path = node.path.as_ref().map_or(vec![], |p| p.split_relative());
         self.files.insert(path.clone(), node);
 
-        match find_struct_names(node)
-        {
-            Ok(ok) => {
-                self.type_id_map.insert(path, ok);
-            },
-            Err(err) => {
-                self.errors.extend(err);
-            },
-        }
+        node.declarations.iter().filter_map(|d| match d {
+            Declaration::Struct(s) => Some(s.clone()),
+            _ => None
+        }).for_each(|d| {
+            
+        });
 
         self
     }
@@ -81,10 +104,21 @@ impl<'a> TypeLibraryBuilder<'a>
     pub fn build(self) -> Result<TypeLibrary, Vec<TypeError>>
     {
         let mut types = HashMap::new();
-        for (path, file) in self.files.iter()
+        for (path, file) in &self.files
         {
-            let id_map = 
+            let Some(id_map) = self.type_id_map.get(path) else {
+                continue;
+            };
+
+            file.declarations.iter().filter_map(|d| match d {
+                Declaration::Struct(s) => Some(s.clone()),
+                _ => None
+            }).for_each(|d| {
+                
+            });
         }
+
+        todo!()
     }
 }
 
