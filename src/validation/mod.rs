@@ -80,7 +80,11 @@ impl<'a> TypeLibraryBuilder<'a>
 
     pub fn build(self) -> Result<TypeLibrary, Vec<TypeError>>
     {
-        
+        let mut types = HashMap::new();
+        for (path, file) in self.files.iter()
+        {
+            let id_map = 
+        }
     }
 }
 
