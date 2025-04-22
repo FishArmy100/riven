@@ -195,7 +195,7 @@ pub enum Declaration
 #[derive(Debug)]
 pub struct FileNode
 {
-    pub path: Option<PathInfo>,
+    pub path: PathInfo,
     pub usings: Vec<UseStmt>,
     pub declarations: Vec<Declaration>,
     pub eof: Token,

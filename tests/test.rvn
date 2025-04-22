@@ -1,8 +1,8 @@
 
 pub struct String {}
 
-struct Game
+struct Board
 {
-    board: []String,
+    board: []String = "ddd",
     current_player: String,
 }

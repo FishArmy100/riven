@@ -1,6 +1,6 @@
 use uuid::Uuid;
 
-use crate::utils::{TextLoc, TextPos};
+use crate::utils::{FileInfo, TextLoc, TextPos};
 
 
 pub const ASSIGNMENT_TOKENS: &'static [TokenType] = &[
@@ -146,7 +146,6 @@ pub struct Token
     pub pos: TextPos,
     pub token_type: TokenType,
     pub value: Option<TokenValue>,
-    pub file_id: Option<Uuid>
 }
 
 impl Token 
@@ -161,9 +160,9 @@ impl Token
         self.value.as_ref().map(|s| s.as_int()).flatten()
     }
 
-    pub fn get_loc(&self, text: &[char]) -> TextLoc
+    pub fn get_loc(&self, file: &FileInfo) -> TextLoc
     {
-        self.pos.get_loc(text)
+        self.pos.get_loc(file)
     }
 }
 

@@ -1,4 +1,4 @@
-use crate::lexing::token::{Token, TokenType};
+use crate::{lexing::token::{Token, TokenType}, utils::{FileInfo, TextLoc, TextPos}};
 
 use super::{ParserError, ParserResult};
 
@@ -7,15 +7,17 @@ pub struct TokenReader<'a>
 {
     tokens: &'a [Token],
     index: usize,
+    file: &'a FileInfo,
 }
 
 impl<'a> TokenReader<'a>
 {
-    pub fn new(tokens: &'a [Token], start_index: Option<usize>) -> Self
+    pub fn new(tokens: &'a [Token], file: &'a FileInfo, start_index: Option<usize>) -> Self
     {
         Self {
             tokens,
-            index: start_index.map_or(0, |v| v)
+            index: start_index.map_or(0, |v| v),
+            file,
         }
     }
 
@@ -43,6 +45,18 @@ impl<'a> TokenReader<'a>
         else 
         {
             None    
+        }
+    }
+
+    pub fn current_loc(&self) -> TextLoc
+    {
+        match self.current()
+        {
+            Some(current) => current.get_loc(self.file),
+            None => {
+                let len = self.file.chars.len();
+                TextPos::uniform(len).get_loc(self.file)
+            },
         }
     }
 
@@ -171,7 +185,7 @@ impl<'a> TokenReader<'a>
         match self.check(t)
         {
             Some(token) => Ok(token),
-            None => Err(ParserError::ExpectedToken(t, self.current()))
+            None => Err(ParserError::ExpectedToken(t, self.current_loc()))
         }
     }
 
@@ -180,7 +194,7 @@ impl<'a> TokenReader<'a>
         match self.check_many(tokens)
         {
             Some(token) => Ok(token),
-            None => Err(ParserError::ExpectedTokens(tokens.to_vec(), self.current()))
+            None => Err(ParserError::ExpectedTokens(tokens.to_vec(), self.current_loc()))
         }
     }
 

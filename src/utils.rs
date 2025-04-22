@@ -68,21 +68,21 @@ impl TextPos
         }
     }
 
-    pub fn get_loc(&self, text: &[char]) -> TextLoc
+    pub fn get_loc(&self, file: &FileInfo) -> TextLoc
     {
         let mut line = 1;
         let mut column = 1;
 
-        let line_count = text.iter().filter(|f| **f == '\n').count() + 1;
+        let line_count = file.chars.iter().filter(|f| **f == '\n').count() + 1;
 
-        if self.begin >= text.len()
+        if self.begin >= file.chars.len()
         {
-            return TextLoc { line: line_count, column };
+            return TextLoc { line: line_count, column, file: file.path.clone() };
         }
 
         for i in 0..=self.begin
         {
-            if text[i] == '\n'
+            if file.chars[i] == '\n'
             {
                 line += 1;
                 column = 0;
@@ -93,7 +93,7 @@ impl TextPos
             }
         }
 
-        TextLoc { line, column }
+        TextLoc { line, column, file: file.path.clone() }
     }
 }
 
@@ -119,18 +119,19 @@ impl From<usize> for TextPos
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone)]
 pub struct TextLoc
 {
     pub line: usize,
     pub column: usize,
+    pub file: PathInfo,
 }
 
 impl std::fmt::Display for TextLoc
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result 
     {
-        write!(f, "{}:{}", self.line, self.column)
+        write!(f, "{}:{}:{}", self.line, self.column, self.file.full_path)
     }
 }
 
@@ -183,6 +184,7 @@ impl PathInfo
     }
 }
 
+#[derive(Debug)]
 pub struct FileInfo 
 {
     pub id: Uuid,
@@ -196,8 +198,19 @@ impl FileInfo
     {
         FileInfo { 
             id: Uuid::new_v4(), 
-            path: (), 
-            chars: () 
+            path, 
+            chars: src.chars().collect(), 
         }
+    }
+
+    pub fn read(path: &str) -> Result<Self, String>
+    {
+        let src = read_file(path)?;
+        let path = PathInfo {
+            full_path: path.to_string(),
+            relative_path: "".to_string()
+        };
+
+        Ok(Self::new(src, path))
     }
 }

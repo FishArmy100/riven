@@ -31,7 +31,7 @@ impl CompilerError for TypeError
         }
     }
 
-    fn pos(&self) -> Option<TextPos> 
+    fn loc(&self) -> Option<TextPos> 
     {
         match self 
         {

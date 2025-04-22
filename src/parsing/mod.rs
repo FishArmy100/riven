@@ -9,39 +9,40 @@ pub use type_parsing::*;
 pub use expr_parsing::*;
 
 use token_reader::TokenReader;
-use crate::{compiler::CompilerError, lexing::token::{Token, TokenType}, utils::PathInfo};
+use uuid::Uuid;
+use crate::{compiler::CompilerError, lexing::token::{Token, TokenType}, utils::{FileInfo, PathInfo, TextLoc}};
 use self::ast::*;
 use crate::utils::TextPos;
 
 #[derive(Debug, Clone)]
 pub enum ParserError
 {
-    ExpectedExpression(Option<Token>),
-    ExpectedType(Option<Token>),
-    ExpectedToken(TokenType, Option<Token>),
-    ExpectedTokens(Vec<TokenType>, Option<Token>),
-    ExpectedALambdaParameter(Option<Token>),
-    ExpectedALambdaBody(Option<Token>),
-    ExpectedStatement(Option<Token>),
-    ExpectedBlock(Option<Token>),
-    ExpectedDeclaration(Option<Token>),
+    ExpectedExpression(TextLoc),
+    ExpectedType(TextLoc),
+    ExpectedToken(TokenType, TextLoc),
+    ExpectedTokens(Vec<TokenType>, TextLoc),
+    ExpectedALambdaParameter(TextLoc),
+    ExpectedALambdaBody(TextLoc),
+    ExpectedStatement(TextLoc),
+    ExpectedBlock(TextLoc),
+    ExpectedDeclaration(TextLoc),
 }
 
 impl CompilerError for ParserError
 {
-    fn pos(&self) -> Option<TextPos> 
+    fn loc(&self) -> TextLoc
     {
         match self 
         {
-            ParserError::ExpectedExpression(token) => token.as_ref().map(|t| t.pos),
-            ParserError::ExpectedType(token) => token.as_ref().map(|t| t.pos),
-            ParserError::ExpectedToken(_, token) => token.as_ref().map(|t| t.pos),
-            ParserError::ExpectedTokens(_, token) => token.as_ref().map(|t| t.pos),
-            ParserError::ExpectedALambdaParameter(token) => token.as_ref().map(|t| t.pos),
-            ParserError::ExpectedStatement(token) => token.as_ref().map(|t| t.pos),
-            ParserError::ExpectedBlock(token) => token.as_ref().map(|t| t.pos),
-            ParserError::ExpectedDeclaration(token) => token.as_ref().map(|t| t.pos),
-            ParserError::ExpectedALambdaBody(token) => token.as_ref().map(|t| t.pos),
+            ParserError::ExpectedExpression(loc) => loc.clone(),
+            ParserError::ExpectedType(loc) => loc.clone(),
+            ParserError::ExpectedToken(_, loc) => loc.clone(),
+            ParserError::ExpectedTokens(_, loc) => loc.clone(),
+            ParserError::ExpectedALambdaParameter(loc) => loc.clone(),
+            ParserError::ExpectedStatement(loc) => loc.clone(),
+            ParserError::ExpectedBlock(loc) => loc.clone(),
+            ParserError::ExpectedDeclaration(loc) => loc.clone(),
+            ParserError::ExpectedALambdaBody(loc) => loc.clone(),
         }
     }
 
@@ -64,9 +65,9 @@ impl CompilerError for ParserError
 
 pub type ParserResult<T> = Result<T, ParserError>;
 
-pub fn parse_file(tokens: &Vec<Token>, path: Option<PathInfo>) -> Result<Option<FileNode>, Vec<ParserError>>
+pub fn parse_file(tokens: &Vec<Token>, file: &FileInfo) -> Result<Option<FileNode>, Vec<ParserError>>
 {
-    let mut reader = TokenReader::new(tokens, None);
+    let mut reader = TokenReader::new(tokens, file, None);
     let mut usings = vec![];
     let mut declarations = vec![];
     let mut errors = vec![];
@@ -111,7 +112,7 @@ pub fn parse_file(tokens: &Vec<Token>, path: Option<PathInfo>) -> Result<Option<
     }
 
     Ok(Some(FileNode { 
-        path,
+        path: file.path.clone(),
         usings, 
         declarations, 
         eof 
@@ -120,11 +121,11 @@ pub fn parse_file(tokens: &Vec<Token>, path: Option<PathInfo>) -> Result<Option<
 
 fn expect_ast_item<P, R, E>(reader: &mut TokenReader, predicate: P, error: E) -> ParserResult<R>
     where P : Fn(&mut TokenReader) -> ParserResult<Option<R>>,
-          E : Fn(Option<Token>) -> ParserError
+          E : Fn(TextLoc) -> ParserError
 {
     match predicate(reader)?
     {
         Some(r) => Ok(r),
-        None => Err(error(reader.current()))
+        None => Err(error(reader.current_loc()))
     }
 }

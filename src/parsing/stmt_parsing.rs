@@ -15,7 +15,7 @@ pub fn expect_statement(reader: &mut TokenReader) -> ParserResult<Statement>
     }
     else
     {
-        Err(ParserError::ExpectedStatement(reader.current()))    
+        Err(ParserError::ExpectedStatement(reader.current_loc()))    
     }
 }
 
@@ -97,7 +97,7 @@ pub fn expect_block_stmt(reader: &mut TokenReader) -> ParserResult<BlockStmt>
     match parse_block_stmt(reader)?
     {
         Some(b) => Ok(b),
-        None => Err(ParserError::ExpectedBlock(reader.current()))
+        None => Err(ParserError::ExpectedBlock(reader.current_loc()))
     }
 }
 
@@ -270,7 +270,7 @@ fn parse_struct_decl(reader: &mut TokenReader) -> ParserResult<Option<StructDecl
     let Some(struct_tok) = reader.check(TokenType::Struct) else { 
         if pub_tok.is_some()
         {
-            return Err(ParserError::ExpectedDeclaration(reader.current()))
+            return Err(ParserError::ExpectedDeclaration(reader.current_loc()))
         }
 
         return Ok(None); 
@@ -332,7 +332,7 @@ fn parse_fn_decl(reader: &mut TokenReader) -> ParserResult<Option<FnDecl>>
 
         if pub_tok.is_some()
         {
-            return Err(ParserError::ExpectedDeclaration(reader.current()))
+            return Err(ParserError::ExpectedDeclaration(reader.current_loc()))
         }
 
         return Ok(None) 
@@ -356,7 +356,7 @@ fn parse_fn_decl(reader: &mut TokenReader) -> ParserResult<Option<FnDecl>>
     let self_param = reader.check(TokenType::SelfVal);
     if self_param.is_some() && !reader.current_is(&[TokenType::Comma, TokenType::CloseParen])
     {
-        return Err(ParserError::ExpectedToken(TokenType::Comma, reader.current()))
+        return Err(ParserError::ExpectedToken(TokenType::Comma, reader.current_loc()))
     }
 
     reader.check(TokenType::Comma); // advance past the comma
@@ -480,7 +480,7 @@ fn parse_const(reader: &mut TokenReader) -> ParserResult<Option<ConstStmt>>
     {
         if pub_tok.is_some()
         {
-            return Err(ParserError::ExpectedDeclaration(reader.current()))
+            return Err(ParserError::ExpectedDeclaration(reader.current_loc()))
         }
 
         Ok(None)
@@ -516,7 +516,7 @@ pub fn parse_use_stmt(reader: &mut TokenReader) -> ParserResult<Option<UseStmt>>
 
         if ids.len() == 0
         {
-            return Err(ParserError::ExpectedToken(TokenType::Identifier, reader.current()));
+            return Err(ParserError::ExpectedToken(TokenType::Identifier, reader.current_loc()));
         }
 
         let semi_colon = reader.expect(TokenType::SemiColon)?;

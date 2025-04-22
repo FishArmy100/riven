@@ -5,7 +5,7 @@ use super::{token_reader::TokenReader, ParserError, ParserResult};
 
 pub fn peek_type(reader: &TokenReader) -> Option<(TypeName, usize)>
 {
-    let mut type_reader = TokenReader::new(reader.tokens(), Some(reader.index()));
+    let mut type_reader = reader.clone();
 
     match parse_type_name(&mut type_reader)
     {
@@ -16,7 +16,7 @@ pub fn peek_type(reader: &TokenReader) -> Option<(TypeName, usize)>
 
 pub fn is_type(reader: &TokenReader) -> Option<usize>
 {
-    let mut type_reader = TokenReader::new(reader.tokens(), Some(reader.index()));
+    let mut type_reader = reader.clone();
 
     match parse_type_name(&mut type_reader)
     {
@@ -28,7 +28,7 @@ pub fn is_type(reader: &TokenReader) -> Option<usize>
 pub fn is_type_and<F>(reader: &TokenReader, f: F) -> Option<usize>
     where F : Fn(&TypeName) -> bool
 {
-    let mut type_reader = TokenReader::new(reader.tokens(), Some(reader.index()));
+    let mut type_reader = reader.clone();
 
     match parse_type_name(&mut type_reader)
     {
@@ -45,7 +45,7 @@ pub fn expect_type_name(reader: &mut TokenReader) -> ParserResult<TypeName>
     }
     else
     {
-        Err(ParserError::ExpectedType(reader.current()))    
+        Err(ParserError::ExpectedType(reader.current_loc()))    
     }
 }
 
@@ -73,7 +73,7 @@ pub fn parse_type_name(reader: &mut TokenReader) -> ParserResult<Option<TypeName
             let close_bracket = reader.expect(TokenType::CloseBracket)?;
             let type_name = match parse_type_name(reader)? {
                 Some(type_name) => Box::new(type_name),
-                None => return Err(ParserError::ExpectedType(reader.current()))
+                None => return Err(ParserError::ExpectedType(reader.current_loc()))
             };
 
             Ok(Some(TypeName::Array { open_bracket, close_bracket, type_name }))
@@ -97,14 +97,14 @@ fn parse_fn_type(reader: &mut TokenReader) -> ParserResult<TypeName>
     while !reader.current_is(&[TokenType::CloseParen])
     {
         let Some(type_name) = parse_type_name(reader)? else {
-            return Err(ParserError::ExpectedType(reader.current()));
+            return Err(ParserError::ExpectedType(reader.current_loc()));
         };
 
         parameter_types.push(type_name);
 
         if !reader.current_is(&[TokenType::CloseParen, TokenType::Comma])
         {
-            return Err(ParserError::ExpectedToken(TokenType::CloseParen, reader.current()));
+            return Err(ParserError::ExpectedToken(TokenType::CloseParen, reader.current_loc()));
         }
 
         let _ = reader.check(TokenType::Comma); // makes sure to skip the comma
