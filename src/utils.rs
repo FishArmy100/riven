@@ -1,4 +1,4 @@
-use std::{fs::{create_dir_all, File, OpenOptions}, io::{Read, Write}, ops::Add, path::Path};
+use std::{fs::{create_dir_all, File, OpenOptions}, io::{Read, Write}, ops::Add, path::Path, sync::Arc};
 
 use uuid::Uuid;
 
@@ -131,7 +131,7 @@ impl std::fmt::Display for TextLoc
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result 
     {
-        write!(f, "{}:{}:{}", self.line, self.column, self.file.full_path)
+        write!(f, "{}:{}:{}", self.line, self.column, self.file.full_path.as_ref().unwrap_or(&self.file.relative_path))
     }
 }
 
@@ -160,7 +160,7 @@ pub fn partition_errors<T, E>(results: impl IntoIterator<Item = Result<T, E>>) -
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PathInfo
 {
-    pub full_path: String,
+    pub full_path: Option<String>,
     pub relative_path: String,
 }
 
@@ -207,10 +207,25 @@ impl FileInfo
     {
         let src = read_file(path)?;
         let path = PathInfo {
-            full_path: path.to_string(),
+            full_path: Some(path.to_string()),
             relative_path: "".to_string()
         };
 
         Ok(Self::new(src, path))
+    }
+
+    pub fn from_text(src: &str, path: String) -> Self 
+    {
+        let path = PathInfo {
+            full_path: None,
+            relative_path: path.to_string(),
+        };
+
+        Self::new(src.to_string(), path)
+    }
+
+    pub fn as_arc(self) -> Arc<Self>
+    {
+        Arc::new(self)
     }
 }

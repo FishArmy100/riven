@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use either::Either;
 
-use crate::{lexing::token::Token, utils::PathInfo};
+use crate::{lexing::token::Token, utils::{FileInfo, PathInfo}};
 
 use super::{Expression, TypeName};
 
@@ -195,10 +195,10 @@ pub enum Declaration
 #[derive(Debug)]
 pub struct FileNode
 {
-    pub path: PathInfo,
     pub usings: Vec<UseStmt>,
     pub declarations: Vec<Declaration>,
     pub eof: Token,
+    pub info: Arc<FileInfo>,
 }
 
 #[derive(Debug)]

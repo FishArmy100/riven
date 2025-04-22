@@ -4,6 +4,8 @@ pub mod expr_parsing;
 pub mod stmt_parsing;
 pub mod ast;
 
+use std::sync::Arc;
+
 use stmt_parsing::{parse_declaration, parse_use_stmt};
 pub use type_parsing::*;
 pub use expr_parsing::*;
@@ -65,9 +67,9 @@ impl CompilerError for ParserError
 
 pub type ParserResult<T> = Result<T, ParserError>;
 
-pub fn parse_file(tokens: &Vec<Token>, file: &FileInfo) -> Result<Option<FileNode>, Vec<ParserError>>
+pub fn parse_file(tokens: &Vec<Token>, file: Arc<FileInfo>) -> Result<Option<FileNode>, Vec<ParserError>>
 {
-    let mut reader = TokenReader::new(tokens, file, None);
+    let mut reader = TokenReader::new(tokens, &file, None);
     let mut usings = vec![];
     let mut declarations = vec![];
     let mut errors = vec![];
@@ -111,11 +113,11 @@ pub fn parse_file(tokens: &Vec<Token>, file: &FileInfo) -> Result<Option<FileNod
         return Err(errors)
     }
 
-    Ok(Some(FileNode { 
-        path: file.path.clone(),
+    Ok(Some(FileNode {
         usings, 
         declarations, 
-        eof 
+        eof,
+        info: file,
     }))
 }
 

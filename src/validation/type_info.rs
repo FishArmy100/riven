@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 
+use itertools::Itertools;
 use uuid::Uuid;
 
-use crate::parsing::ast::TypeName;
+use crate::{parsing::ast::TypeName, utils::FileInfo};
 
-use super::TypeError;
+use super::{ResolverResult, TypeError, TypeLibrary, TypeResolver};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TypeInfo
@@ -21,32 +22,48 @@ pub enum TypeInfo
 
 impl TypeInfo
 {
-    pub fn from(type_name: &TypeName, structs: &HashMap<String, Uuid>) -> Result<Self, TypeError>
+    pub fn from(type_name: &TypeName, resolver: TypeResolver, usings: &[Vec<String>], file: &FileInfo) -> Result<Self, TypeError>
     {
         match type_name
         {
             TypeName::Identifier(token) => {
-                let Some(id) = structs.get(token.value_string().unwrap()) else {
-                    return Err(TypeError::UnknownType(token.clone()))
-                };
-                
+                let id = resolver.resolve(token, usings).to_result(file)?;
                 Ok(Self::Primary(id.clone()))
             },
             TypeName::Array { open_bracket: _, close_bracket: _, type_name } => {
-                let inner = Self::from(type_name, structs)?;
+                let inner = Self::from(type_name, resolver, usings, file)?;
                 Ok(Self::Array(Box::new(inner)))
             },
             TypeName::Function { fn_type_tok: _, open_paren: _, parameter_types, close_paren: _, return_type } => {
-                let args = parameter_types.iter().map(|p| TypeInfo::from(p, structs)).collect::<Result<_, _>>()?;
-                let returned = return_type.as_ref().map(|r| TypeInfo::from(&r.1, structs));
+                let args = parameter_types.iter().map(|p| TypeInfo::from(p, resolver, usings, file)).collect::<Result<_, _>>()?;
+                let returned = return_type.as_ref().map(|r| TypeInfo::from(&r.1, resolver, usings, file));
 
                 if let Some(Err(err)) = returned { return Err(err) }
 
                 Ok(Self::Function { args, returned: returned.map(|r| Box::new(r.unwrap())) })
             },
             TypeName::Optional { question_mark: _, type_name } => {
-                let inner = Self::from(type_name, structs)?;
+                let inner = Self::from(type_name, resolver, usings, file)?;
                 Ok(Self::Optional(Box::new(inner)))
+            },
+        }
+    }
+
+    pub fn pretty_print(&self, library: &TypeLibrary) -> String 
+    {
+        match self 
+        {
+            TypeInfo::Primary(uuid) => library.get_type(uuid).name.clone(),
+            TypeInfo::Optional(type_info) => format!("?{}", type_info.pretty_print(library)),
+            TypeInfo::Array(type_info) => format!("[]{}", type_info.pretty_print(library)),
+            TypeInfo::Function { args, returned } => {
+                let mut str = format!("Fn({})", args.iter().map(|a| a.pretty_print(library)).join(", "));
+                if let Some(ret) = returned
+                {
+                    str += &format!(" -> {}", ret.pretty_print(library));
+                }
+
+                str
             },
         }
     }

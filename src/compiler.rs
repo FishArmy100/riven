@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use uuid::Uuid;
 
@@ -26,15 +26,15 @@ pub fn run_lexer(file: &FileInfo) -> Result<Vec<Token>, Vec<String>>
     }
 }
 
-pub fn run_parser(file: &FileInfo) -> Result<FileNode, Vec<String>>
+pub fn run_parser(file: Arc<FileInfo>) -> Result<FileNode, Vec<String>>
 {
-    let tokens = run_lexer(file)?;
+    let tokens = run_lexer(&file)?;
 
-    match parsing::parse_file(&tokens, file)
+    match parsing::parse_file(&tokens, file.clone())
     {
         Ok(Some(ok)) => Ok(ok),
         Ok(None) => {
-            let error = ParserError::ExpectedToken(TokenType::EOF, TextPos::uniform(0).get_loc(file)).format_error();
+            let error = ParserError::ExpectedToken(TokenType::EOF, TextPos::uniform(0).get_loc(&file)).format_error();
             Err(vec![error])
         }
         Err(err) => {
