@@ -1,9 +1,10 @@
+use std::collections::HashMap;
+
 use uuid::Uuid;
 
-use crate::{lexing::token::TokenValue, parsing::ast::{BinaryExpr, Expression, FileNode, UnaryExpr}};
+use crate::{lexing::token::TokenValue, parsing::ast::{BinaryExpr, ConstructionArg, ConstructionExpr, Expression, FileNode, UnaryExpr}, utils::{FileInfo, TextPos}, validation::{builtins::{BOOL_TYPE, FLOAT_TYPE, INT_TYPE, STRING_TYPE}, operators::{BinaryOpType, GlobalOperators, UnaryOpType}, type_info::TypeInfo, StructDef, TypeError, TypeLibrary}};
 
-use super::{builtins::{BOOL_TYPE, FLOAT_TYPE, INT_TYPE, STRING_TYPE}, operators::{BinaryOpType, GlobalOperators, UnaryOpType}, TypeError, TypeInfo, TypeLibrary};
-
+#[derive(Debug)]
 pub enum TypedExpression
 {
     Literal
@@ -60,7 +61,8 @@ pub struct ExprCheckArgs<'a>
 {
     pub operators: &'a GlobalOperators,
     pub library: &'a TypeLibrary,
-    pub file: &'a FileNode,
+    pub file: &'a FileInfo,
+    pub usings: &'a [Vec<String>],
 }
 
 impl TypedExpression 
@@ -98,7 +100,7 @@ impl TypedExpression
                     None => {
                         let left_str = left.returned().pretty_print(args.library);
                         let right_str = right.returned().pretty_print(args.library);
-                        Err(TypeError::NoBinaryOp(op, left_str, right_str, operator.get_loc(&args.file.info)))
+                        Err(TypeError::NoBinaryOp(op, left_str, right_str, operator.get_loc(&args.file)))
                     }
                 }
             },
@@ -117,9 +119,26 @@ impl TypedExpression
                     },
                     None => {
                         let expr_str = expression.returned().pretty_print(args.library);
-                        Err(TypeError::NoUnaryOp(op, expr_str, operator.get_loc(&args.file.info)))
+                        Err(TypeError::NoUnaryOp(op, expr_str, operator.get_loc(&args.file)))
                     }
                 }
+            },
+            Expression::Construction(ConstructionExpr { type_name, open_brace: _, args: con_args, close_brace: _ }) => {
+                let resolver = args.library.resolver();
+                let type_info = TypeInfo::from(type_name, resolver, args.usings, args.file)?;
+
+                let TypeInfo::Primary(id) = type_info else {
+                    return Err(TypeError::CannotConstruct(type_info.pretty_print(args.library), type_name.get_pos().get_loc(args.file)))
+                };
+
+                let def = args.library.get_type(&id);
+                let args = check_construction_args(def, con_args, args, type_name.get_pos())?;
+                
+                Ok(TypedExpression::Construction { 
+                    type_id: id.clone(), 
+                    args, 
+                    returned: TypeInfo::Primary(id) 
+                })
             }
             _ => panic!("This expression has not been implemented yet")
         }
@@ -139,4 +158,43 @@ impl TypedExpression
             TypedExpression::Construction { type_id: _, args: _, returned } => returned,
         }
     }
+}
+
+fn check_construction_args(def: &StructDef, con_args: &[ConstructionArg], args: ExprCheckArgs, pos: TextPos) -> Result<Vec<(String, TypedExpression)>, TypeError>
+{
+    let mut members = def.members.iter()
+        .map(|(name, type_info)| (name, (type_info, false)))
+        .collect::<HashMap<_, _>>();
+
+    let mut expressions = vec![];
+
+    for con_arg in con_args
+    {
+        let name = con_arg.name.value_string().unwrap();
+        let Some((member, was_init)) = members.get_mut(name) else {
+            return Err(TypeError::InvalidConstructionArgs(con_arg.name.get_loc(args.file)));
+        };
+
+        if *was_init 
+        {
+            return Err(TypeError::InvalidConstructionArgs(con_arg.name.get_loc(args.file)));
+        }
+
+        let expr = TypedExpression::check_expr(&con_arg.value, args)?;
+        if *expr.returned() != member.type_info 
+        {
+            return Err(TypeError::InvalidConstructionArgs(con_arg.name.get_loc(args.file)));
+        }
+
+        *was_init = true;
+
+        expressions.push((name.clone(), expr));
+    }
+
+    if !members.values().all(|(_, init)| *init)
+    {
+        return Err(TypeError::InvalidConstructionArgs(pos.get_loc(args.file)));
+    }
+
+    Ok(expressions)
 }

@@ -2,6 +2,7 @@ pub mod ast;
 pub mod type_info;
 pub mod builtins;
 pub mod operators;
+pub mod functions;
 
 use std::{collections::HashMap, sync::Arc};
 
@@ -22,6 +23,8 @@ pub enum TypeError
     ConflictingTypes(Token, TextLoc),
     NoBinaryOp(BinaryOpType, String, String, TextLoc),
     NoUnaryOp(UnaryOpType, String, TextLoc),
+    CannotConstruct(String, TextLoc),
+    InvalidConstructionArgs(TextLoc)
 }
 
 impl CompilerError for TypeError
@@ -36,6 +39,8 @@ impl CompilerError for TypeError
             TypeError::ConflictingTypes(token, _) => format!("Conflicting type definitions for {}", token.value_string().unwrap()),
             TypeError::NoBinaryOp(op, left, right, _) => format!("No binary operator {} for types {} and {}", op.to_string(), left, right),
             TypeError::NoUnaryOp(op, t, _) => format!("No unary operator {} for type {}", op.to_string(), t),
+            TypeError::CannotConstruct(t, _) => format!("Cannot construct type {}", t),
+            TypeError::InvalidConstructionArgs(_) => format!("Invalid construction args"),
         }
     }
 
@@ -49,6 +54,8 @@ impl CompilerError for TypeError
             TypeError::ConflictingTypes(_, loc) => loc.clone(),
             TypeError::NoBinaryOp(_, _, _, loc) => loc.clone(),
             TypeError::NoUnaryOp(_, _, loc) => loc.clone(),
+            TypeError::CannotConstruct(_, loc) => loc.clone(),
+            TypeError::InvalidConstructionArgs(loc) => loc.clone(),
         }
     }
 }

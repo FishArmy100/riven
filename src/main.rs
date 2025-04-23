@@ -3,7 +3,7 @@ use std::sync::Arc;
 use compiler::CompilerError;
 use itertools::Itertools;
 use utils::FileInfo;
-use validation::{TypeLibraryBuilder, TypeResolver};
+use validation::{ast::{ExprCheckArgs, TypedExpression}, builtins, TypeLibraryBuilder, TypeResolver};
 // use validation::StructDef;
 
 pub mod lexing;
@@ -14,56 +14,30 @@ pub mod validation;
 
 fn main() 
 {
-    let files = get_files().into_iter().map(|(src, path)| {
-        let file = FileInfo::from_text(&src, path).as_arc();
-        let node = compiler::run_parser(file).unwrap();
-        Arc::new(node)
-    }).collect_vec();
-    
-    let library = files.iter().fold(TypeLibraryBuilder::new(), |mut b, f| { b.append_file(f.clone()); b }).build();
+    let mut builder = TypeLibraryBuilder::new();
+    builder.append_builtins(vec![], builtins::get_builtins());
 
-    let library = match library {
-        Ok(ok) => ok,
-        Err(errors) => {
-            for e in errors
-            {
-                println!("{}", e.format_error())
-            }
-            return;
-        }
-    };
+    let file = FileInfo::from_text("struct Test { name: String, age: Int }", "src".into());
+    let file = compiler::run_parser(Arc::new(file)).unwrap();
+    builder.append_file(Arc::new(file));
 
-    let usings = vec![vec!["src".to_string()]];
-    let id = library.resolver().resolve_name("Test", &usings).unwrap();
-    let t = library.get_type(&id);
-    println!("{:#?}", t);
-}
+    let library = builder.build().unwrap();
+    let operators = builtins::get_operators();
 
-fn get_files() -> Vec<(String, String)>
-{
-    let f1 = "
-        struct Int {}
-        struct Float {}
-    ".to_string();
+    let src = "Test { name: \"Nate Craver\", age: 21 }";
+    let file = &FileInfo::from_text(src, "src".into());
+    let expression = compiler::run_expression_parser(file).unwrap();
 
-    let f2 = "struct String {}".to_string();
+    let expression = TypedExpression::check_expr(&expression, ExprCheckArgs {
+        library: &library,
+        operators: &operators,
+        file,
+        usings: &vec![vec!["src".into()]]
+    });
 
-    let f3 = "struct Void {}".to_string();
-
-    let f4 = "
-        use lib.numbers;
-        use lib.string;
-
-        struct Test { 
-            number: Int, 
-            grants: []String 
-        }
-    ".to_string();
-
-    vec![
-        (f1, "lib/numbers".into()),
-        (f2, "lib/string".into()),
-        (f3, "".into()),
-        (f4, "src".into())
-    ]
+    match expression
+    {
+        Ok(ok) => println!("{:#?}", ok),
+        Err(error) => println!("{}", error.format_error()),
+    }
 }
