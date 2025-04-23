@@ -3,28 +3,39 @@ pub mod type_info;
 pub mod builtins;
 pub mod operators;
 pub mod functions;
+pub mod types;
+pub mod var;
 
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashSet, sync::Arc};
 
-use either::Either::{self, Left, Right};
-use itertools::Itertools;
-use operators::{BinaryOpType, UnaryOpType};
+use ast::{ExprCheckArgs, TypedExpression};
+use functions::{FuncLibrary, FuncLibraryBuilder};
 use type_info::TypeInfo;
-use uuid::Uuid;
+pub use types::*;
 
-use crate::{compiler::CompilerError, lexing::token::{Token, TokenType}, parsing::ast::{Declaration, FileNode, StructDecl, TypeName}, utils::{FileInfo, PathInfo, TextLoc, TextPos}};
+use itertools::Itertools;
+use operators::{BinaryOpType, GlobalOperators, UnaryOpType};
+
+use crate::{compiler::CompilerError, lexing::token::Token, parsing::ast::{Expression, FileNode, Program}, utils::{FileInfo, TextLoc, TextPos}};
 
 #[derive(Debug, Clone)]
 pub enum TypeError
 {
     UnknownType(Token, TextLoc),
     DuplicateTypeDef(Token, TextLoc),
-    UnknownUsing(Vec<Token>, TextLoc),
+    UnknownUsing(Vec<String>, TextLoc),
     ConflictingTypes(Token, TextLoc),
     NoBinaryOp(BinaryOpType, String, String, TextLoc),
     NoUnaryOp(UnaryOpType, String, TextLoc),
     CannotConstruct(String, TextLoc),
-    InvalidConstructionArgs(TextLoc)
+    InvalidConstructionArgs(TextLoc),
+    ConflictingFunctions(Token, TextLoc),
+    UndefinedFunction(Token, TextLoc),
+    ExpectedType(String, TextLoc),
+    FunctionArgumentNeedsInitializer(TextLoc),
+    UnknownIdentifier(String, TextLoc),
+    ExpectedFunction(TextLoc),
+    InvalidCallArgs(Vec<String>, TextLoc),
 }
 
 impl CompilerError for TypeError
@@ -35,12 +46,19 @@ impl CompilerError for TypeError
         {
             TypeError::UnknownType(token, _) => format!("Unknown type {}", token.value_string().unwrap()),
             TypeError::DuplicateTypeDef(token, _) => format!("Duplicate type {}", token.value_string().unwrap()),
-            TypeError::UnknownUsing(tokens, _) => format!("Using path {} does not exist", tokens.iter().map(|t| t.value_string().unwrap()).join(".")),
+            TypeError::UnknownUsing(path, _) => format!("Using path {} does not exist", path.iter().join(".")),
             TypeError::ConflictingTypes(token, _) => format!("Conflicting type definitions for {}", token.value_string().unwrap()),
             TypeError::NoBinaryOp(op, left, right, _) => format!("No binary operator {} for types {} and {}", op.to_string(), left, right),
             TypeError::NoUnaryOp(op, t, _) => format!("No unary operator {} for type {}", op.to_string(), t),
             TypeError::CannotConstruct(t, _) => format!("Cannot construct type {}", t),
             TypeError::InvalidConstructionArgs(_) => format!("Invalid construction args"),
+            TypeError::ConflictingFunctions(token, _) => format!("Conflicting function definitions for {}", token.value_string().unwrap()),
+            TypeError::UndefinedFunction(token, _) => format!("Unknown type {}", token.value_string().unwrap()),
+            TypeError::ExpectedType(t, _) => format!("Expected type {}", t),
+            TypeError::FunctionArgumentNeedsInitializer(_) => format!("Must have a function initializer"),
+            TypeError::UnknownIdentifier(id, _) => format!("Unknown identifier {}", id),
+            TypeError::ExpectedFunction(_) => format!("Expected a function"),
+            TypeError::InvalidCallArgs(items, _) => format!("Expected call args: {}", items.iter().join(", ")),
         }
     }
 
@@ -56,263 +74,189 @@ impl CompilerError for TypeError
             TypeError::NoUnaryOp(_, _, loc) => loc.clone(),
             TypeError::CannotConstruct(_, loc) => loc.clone(),
             TypeError::InvalidConstructionArgs(loc) => loc.clone(),
+            TypeError::ConflictingFunctions(_, loc) => loc.clone(),
+            TypeError::UndefinedFunction(_, loc) => loc.clone(),
+            TypeError::ExpectedType(_, loc) => loc.clone(),
+            TypeError::FunctionArgumentNeedsInitializer(loc) => loc.clone(),
+            TypeError::UnknownIdentifier(_, loc) => loc.clone(),
+            TypeError::ExpectedFunction(loc) => loc.clone(),
+            TypeError::InvalidCallArgs(_, loc) => loc.clone(),
         }
     }
 }
 
-#[derive(Debug)]
-pub struct TypeLibrary
+pub struct ValidationContext
 {
-    type_defs: HashMap<Uuid, StructDef>,
-    type_names: HashMap<Vec<String>, HashMap<String, Uuid>>,
+    pub type_library: TypeLibrary,
+    pub func_library: FuncLibrary,
+    pub operators: GlobalOperators,
 }
 
-impl TypeLibrary
+impl ValidationContext
 {
-    pub fn resolver(&self) -> TypeResolver<'_>
+    pub fn new(program: &Program) -> Result<Self, Vec<TypeError>>
     {
-        TypeResolver(&self.type_names)
-    }
-
-    pub fn get_type(&self, id: &Uuid) -> &StructDef
-    {
-        self.type_defs.get(id).unwrap()
-    }
-}
-
-pub struct TypeLibraryBuilder
-{
-    file_defs: HashMap<Vec<String>, Either<(HashMap<String, Arc<StructDecl>>, Arc<FileNode>), Vec<StructDef>>>,
-    errors: Vec<TypeError>,
-}
-
-impl TypeLibraryBuilder
-{
-    pub fn new() -> Self
-    {
-        Self 
-        {
-            file_defs: HashMap::new(),
-            errors: vec![],
-        }
-    }
-
-    pub fn append_file(&mut self, file: Arc<FileNode>) 
-    {
-        let decls = self.file_defs.entry(file.info.path.split_relative()).or_insert(Either::Left((HashMap::new(), file.clone())));
-        for d in file.declarations.iter()
-        {
-            let Declaration::Struct(s) = d else {
-                continue;   
-            };
-
-            let name = s.id.value_string().unwrap().clone();
-            if decls.as_ref().left().unwrap().0.contains_key(&name)
-            {
-                self.errors.push(TypeError::DuplicateTypeDef(s.id.clone(), s.id.get_loc(&file.info)));
-            }
-            else 
-            {
-                decls.as_mut().left().unwrap().0.insert(name, s.clone());
-            }
-        }
-    }
-
-    pub fn append_builtins(&mut self, path: Vec<String>, defs: Vec<StructDef>)
-    {
-        self.file_defs.insert(path, Right(defs));
-    }
-
-    pub fn build(self) -> Result<TypeLibrary, Vec<TypeError>>
-    {
-        if self.errors.len() > 0 {
-            return Err(self.errors);
-        }
-        
-        let type_names = self.file_defs.iter().map(|(path, decls)| {
-            let defs = match decls
-            {
-                Left((decls, _)) => {
-                    decls.iter()
-                        .map(|(name, _)| (name.clone(), Uuid::new_v4()))
-                        .collect::<HashMap<_, _>>()
-                },
-                Right(defs) => {
-                    defs.iter()
-                        .map(|d| (d.name.clone(), d.id.clone()))
-                        .collect::<HashMap<_, _>>()
-                }
-            };
-            (path.clone(), defs)
-        }).collect();
-
-        let resolver = TypeResolver(&type_names);
+        let type_library = build_type_library(program)?;
+        let operators = builtins::get_operators();
+        let func_library = build_func_library(program, type_library.resolver())?;
 
         let mut errors = vec![];
-        let mut type_defs = HashMap::new();
-        
-        for (_, decls) in &self.file_defs
+        let all_paths = get_all_file_paths(program);
+
+        for file in &program.files
         {
-            let (decls, file) = match decls {
-                Left(parsed) => parsed,
-                Right(builtins) => {
-                    for b in builtins
-                    {
-                        type_defs.insert(b.id.clone(), b.clone());
-                    }
-                    continue;
-                },
+            let (usings, e) = check_usings(file, &all_paths);
+            errors.extend(e.into_iter());
+
+            let args = ExprCheckArgs {
+                type_library: &type_library,
+                operators: &operators,
+                file: &file.info,
+                usings: &usings,
+                func_library: &func_library,
             };
 
-            let mut usings = file.usings.iter()
-                .map(|u| u.ids.iter().map(
-                    |id| id.value_string().unwrap().clone())
-                    .collect_vec())
-                .collect_vec();
-
-            let self_path = file.info.path.split_relative();
-            if self_path.len() > 0
+            if let Err(e) = type_library.build_initializers(args)
             {
-                usings.push(self_path);
+                errors.extend(e.into_iter());
             }
-            usings.push(vec![]);
-            
-            for (_, decl) in decls
+
+            if let Err(e) = func_library.build_initializers(args)
             {
-                let id = match resolver.resolve(&decl.id, &usings).to_result(&file.info) {
-                    Ok(ok) => ok,
-                    Err(err) => {
-                        errors.push(err);
-                        continue;
-                    }
-                };
-                
-                match StructDef::new(id, decl, resolver, &usings, &file.info)
-                {
-                    Ok(ok) => { type_defs.insert(id, ok); },
-                    Err(err) => errors.push(err),
-                };
+                errors.extend(e.into_iter());
             }
         }
 
         if errors.len() > 0
         {
-            Err(errors)
+            return Err(errors)
+        }
+
+        Ok(ValidationContext { 
+            type_library, 
+            func_library, 
+            operators 
+        })
+    }
+
+    pub fn get_check_args<'a>(&'a self, usings: &'a [Vec<String>], file: &'a FileInfo) -> ExprCheckArgs<'a>
+    {
+        ExprCheckArgs { 
+            operators: &self.operators, 
+            type_library: &self.type_library, 
+            func_library: &self.func_library,
+            file, 
+            usings
+        }
+    }
+}
+
+fn build_func_library(program: &Program, type_resolver: TypeResolver) -> Result<FuncLibrary, Vec<TypeError>>
+{
+    let mut builder = FuncLibraryBuilder::new();
+    for file in &program.files
+    {
+        builder.append_file(file.clone());
+    }
+
+    builder.build(type_resolver)
+}
+
+fn build_type_library(program: &Program) -> Result<TypeLibrary, Vec<TypeError>>
+{
+    let mut builder = TypeLibraryBuilder::new();
+    builder.append_builtins(vec![], builtins::get_builtins());
+    for file in &program.files
+    {
+        builder.append_file(file.clone());
+    }
+
+    builder.build()
+}
+
+fn check_usings(file: &FileNode, all_paths: &HashSet<Vec<String>>) -> (Vec<Vec<String>>, Vec<TypeError>)
+{
+    let mut usings = file.usings.iter()
+        .map(|u| {
+            let path = u.ids.iter()
+                .map(|id| id.value_string().unwrap().clone())
+                .collect_vec();
+
+            let mut pos = u.ids[0].pos;
+            for i in 1..u.ids.len()
+            {
+                pos = pos + u.ids[i].pos;
+            }
+
+            (path, pos)
+        })
+        .collect_vec();
+
+    usings.push((file.info.path.split_relative(), TextPos::uniform(0)));
+    usings.push((vec![], TextPos::uniform(0)));
+
+    let errors = usings.iter().filter_map(|(path, pos)| {
+        if !all_paths.contains(path)
+        {
+            Some(TypeError::UnknownUsing(path.clone(), pos.get_loc(&file.info)))
         }
         else 
         {
-            Ok(TypeLibrary { 
-                type_defs, 
-                type_names 
-            })    
+            None
         }
-    }
+    }).collect_vec();
+    
+    let usings = usings.into_iter().map(|u| u.0).dedup().collect_vec();
+    (usings, errors)
+}
+
+fn get_all_file_paths(program: &Program) -> HashSet<Vec<String>>
+{
+    let mut paths = program.files.iter().map(|f| f.info.path.split_relative()).collect::<HashSet<_>>();
+    paths.insert(vec![]);
+    paths
 }
 
 #[derive(Debug, Clone)]
-pub struct StructDef
+pub enum Initializer
 {
-    pub id: Uuid,
-    pub name: String,
-    pub members: HashMap<String, StructMember>,
-    pub is_pub: bool,
+    None,
+    AST(Arc<Expression>),
+    Built(Arc<TypedExpression>),
 }
 
-impl StructDef
+impl Initializer
 {
-    pub fn new(id: Uuid, decl: &StructDecl, resolver: TypeResolver, usings: &[Vec<String>], file: &FileInfo) -> Result<Self, TypeError>
-    {
-        let name = decl.id.value_string().unwrap().clone();
-        let members = decl.members.iter().map(|m| {
-            let name = m.id.value_string().unwrap().clone();
-            let type_info = TypeInfo::from(&m.type_name, resolver, usings, file)?;
-            Ok(StructMember {
-                name,
-                type_info
-            })
-        }).collect::<Result<Vec<_>, _>>()?;
-
-        Ok(StructDef { 
-            id, 
-            name, 
-            members: members.into_iter()
-                .map(|m| (m.name.clone(), m))
-                .collect(),
-            is_pub: decl.pub_tok.is_some(),
-        })
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct StructMember
-{
-    pub name: String,
-    pub type_info: TypeInfo,
-}
-
-#[derive(Debug, Clone)]
-pub enum ResolverResult
-{
-    Undefined(Token),
-    ConflictingTypes(Token),
-    Ok(Uuid),
-}
-
-impl ResolverResult
-{
-    pub fn to_result(&self, file: &FileInfo) -> Result<Uuid, TypeError>
+    pub fn has_init(&self) -> bool 
     {
         match self 
         {
-            ResolverResult::Undefined(token) => Err(TypeError::UnknownType(token.clone(), token.get_loc(file))),
-            ResolverResult::ConflictingTypes(token) => Err(TypeError::UnknownType(token.clone(), token.get_loc(file))),
-            ResolverResult::Ok(uuid) => Ok(uuid.clone()),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct TypeResolver<'a>(pub &'a HashMap<Vec<String>, HashMap<String, Uuid>>);
-
-impl<'a> TypeResolver<'a>
-{
-    pub fn resolve(&self, token: &Token, usings: &[Vec<String>]) -> ResolverResult
-    {
-        let name = token.value_string().unwrap();
-        let possible = usings.iter()
-            .filter_map(|u| self.0.get(u))
-            .filter_map(|file| file.get(name))
-            .collect_vec();
-
-        
-        if possible.len() == 1
-        {
-            ResolverResult::Ok(possible[0].clone())
-        }
-        else if possible.len() == 0
-        {
-            ResolverResult::Undefined(token.clone())
-        }
-        else 
-        {
-            ResolverResult::ConflictingTypes(token.clone())
+            Self::None => false,
+            _ => true,
         }
     }
 
-    pub fn resolve_name(&self, name: &str, usings: &[Vec<String>]) -> Option<Uuid>
+    pub fn built(&self) -> Option<Arc<TypedExpression>>
     {
-        let possible = usings.iter()
-            .filter_map(|u| self.0.get(u))
-            .filter_map(|file| file.get(name))
-            .collect_vec();
+        match self 
+        {
+            Self::Built(b) => Some(b.clone()),
+            _ => None,
+        }
+    }
 
-        if possible.len() == 1
+    pub fn build(&mut self, args: ExprCheckArgs, expected: &TypeInfo) -> Result<(), TypeError>
+    {
+        if let Self::AST(expr) = self 
         {
-            Some(possible[0].clone())
+            let built = TypedExpression::check_expr(expr, args)?;
+            if built.returned() != expected
+            {
+                return Err(TypeError::ExpectedType(expected.pretty_print(args.type_library), expr.get_pos().get_loc(args.file)));
+            }
+            *self = Self::Built(Arc::new(built))
         }
-        else 
-        {
-            None    
-        }
+
+        Ok(())
     }
 }

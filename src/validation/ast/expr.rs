@@ -2,13 +2,24 @@ use std::collections::HashMap;
 
 use uuid::Uuid;
 
-use crate::{lexing::token::TokenValue, parsing::ast::{BinaryExpr, ConstructionArg, ConstructionExpr, Expression, FileNode, UnaryExpr}, utils::{FileInfo, TextPos}, validation::{builtins::{BOOL_TYPE, FLOAT_TYPE, INT_TYPE, STRING_TYPE}, operators::{BinaryOpType, GlobalOperators, UnaryOpType}, type_info::TypeInfo, StructDef, TypeError, TypeLibrary}};
+use crate::{lexing::token::{Token, TokenValue}, parsing::ast::{BinaryExpr, CallExpr, ConstructionArg, ConstructionExpr, Expression, UnaryExpr}, utils::{FileInfo, TextPos}, validation::{builtins::{BOOL_TYPE, FLOAT_TYPE, INT_TYPE, STRING_TYPE}, functions::{FuncLibrary, FuncResolverResult}, operators::{BinaryOpType, GlobalOperators, UnaryOpType}, type_info::TypeInfo, StructDef, TypeError, TypeLibrary}};
+
+#[derive(Debug)]
+pub enum TypedIdentifier
+{
+    Function(Uuid),
+}
 
 #[derive(Debug)]
 pub enum TypedExpression
 {
     Literal
     {
+        returned: TypeInfo,
+    },
+    Identifier
+    {
+        id: TypedIdentifier,
         returned: TypeInfo,
     },
     Binary 
@@ -60,9 +71,23 @@ pub enum TypedExpression
 pub struct ExprCheckArgs<'a>
 {
     pub operators: &'a GlobalOperators,
-    pub library: &'a TypeLibrary,
+    pub type_library: &'a TypeLibrary,
+    pub func_library: &'a FuncLibrary,
     pub file: &'a FileInfo,
     pub usings: &'a [Vec<String>],
+}
+
+impl<'a> ExprCheckArgs<'a>
+{
+    pub fn resolve_name(&self, token: &Token) -> Result<TypedIdentifier, TypeError>
+    {
+        match self.func_library.resolver().resolve(token, self.usings)
+        {
+            FuncResolverResult::Undefined(token) => Err(TypeError::UnknownIdentifier(token.value_string().unwrap().clone(), token.get_loc(self.file))),
+            FuncResolverResult::ConflictingFunctions(token) => Err(TypeError::ConflictingFunctions(token.clone(), token.get_loc(self.file))),
+            FuncResolverResult::Ok(uuid) => Ok(TypedIdentifier::Function(uuid)),
+        }
+    }
 }
 
 impl TypedExpression 
@@ -98,8 +123,8 @@ impl TypedExpression
                         })
                     },
                     None => {
-                        let left_str = left.returned().pretty_print(args.library);
-                        let right_str = right.returned().pretty_print(args.library);
+                        let left_str = left.returned().pretty_print(args.type_library);
+                        let right_str = right.returned().pretty_print(args.type_library);
                         Err(TypeError::NoBinaryOp(op, left_str, right_str, operator.get_loc(&args.file)))
                     }
                 }
@@ -118,26 +143,74 @@ impl TypedExpression
                         })
                     },
                     None => {
-                        let expr_str = expression.returned().pretty_print(args.library);
+                        let expr_str = expression.returned().pretty_print(args.type_library);
                         Err(TypeError::NoUnaryOp(op, expr_str, operator.get_loc(&args.file)))
                     }
                 }
             },
             Expression::Construction(ConstructionExpr { type_name, open_brace: _, args: con_args, close_brace: _ }) => {
-                let resolver = args.library.resolver();
+                let resolver = args.type_library.resolver();
                 let type_info = TypeInfo::from(type_name, resolver, args.usings, args.file)?;
 
                 let TypeInfo::Primary(id) = type_info else {
-                    return Err(TypeError::CannotConstruct(type_info.pretty_print(args.library), type_name.get_pos().get_loc(args.file)))
+                    return Err(TypeError::CannotConstruct(type_info.pretty_print(args.type_library), type_name.get_pos().get_loc(args.file)))
                 };
 
-                let def = args.library.get_type(&id);
+                let def = args.type_library.get_type(&id);
                 let args = check_construction_args(def, con_args, args, type_name.get_pos())?;
                 
                 Ok(TypedExpression::Construction { 
                     type_id: id.clone(), 
                     args, 
                     returned: TypeInfo::Primary(id) 
+                })
+            },
+            Expression::Identifier(id) => {
+                let id = args.resolve_name(id)?;
+
+                let returned = match &id {
+                    TypedIdentifier::Function(id) => args.func_library.get_func(id).get_type_info(),
+                };
+
+                Ok(TypedExpression::Identifier { id, returned })
+            },
+            Expression::Call(CallExpr { expression, open_paren, args: call_args, close_paren }) => {
+                let expr = TypedExpression::check_expr(&expression, args)?;
+
+                // if let TypedExpression::Identifier { id: TypedIdentifier::Function(id), returned } = &expr {
+
+                // }
+
+                let TypeInfo::Function { args: fn_args, returned } = &expr.returned() else {
+                    return Err(TypeError::ExpectedFunction(expression.get_pos().get_loc(args.file)));
+                };
+
+                if call_args.len() != fn_args.len()
+                {
+                    let arg_names = fn_args.iter().map(|a| a.pretty_print(args.type_library)).collect();
+                    let loc = (open_paren.pos + close_paren.pos).get_loc(args.file);
+                    return Err(TypeError::InvalidCallArgs(arg_names, loc));
+                }
+
+                let call_args = call_args.iter().map(|c| {
+                    TypedExpression::check_expr(c, args)
+                }).collect::<Result<Vec<_>, _>>()?;
+
+                if !call_args.iter().zip(fn_args.iter()).all(|(c, f)| {
+                    c.returned() == f
+                })
+                {
+                    let arg_names = fn_args.iter().map(|a| a.pretty_print(args.type_library)).collect();
+                    let loc = (open_paren.pos + close_paren.pos).get_loc(args.file);
+                    return Err(TypeError::InvalidCallArgs(arg_names, loc));
+                }
+                
+                let returned = (**returned).clone();
+                Ok(TypedExpression::Call { 
+                    called: Box::new(expr), 
+                    args: 
+                    call_args, 
+                    returned
                 })
             }
             _ => panic!("This expression has not been implemented yet")
@@ -156,6 +229,7 @@ impl TypedExpression
             TypedExpression::Access { accessed: _, name: _, returned } => returned,
             TypedExpression::Cast { casted: _, type_info: _, returned } => returned,
             TypedExpression::Construction { type_id: _, args: _, returned } => returned,
+            TypedExpression::Identifier { id: _, returned } => returned,
         }
     }
 }
@@ -191,7 +265,7 @@ fn check_construction_args(def: &StructDef, con_args: &[ConstructionArg], args: 
         expressions.push((name.clone(), expr));
     }
 
-    if !members.values().all(|(_, init)| *init)
+    if !members.values().all(|(mem, init)| *init || mem.initializer.has_init())
     {
         return Err(TypeError::InvalidConstructionArgs(pos.get_loc(args.file)));
     }

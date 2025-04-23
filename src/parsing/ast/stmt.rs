@@ -204,5 +204,5 @@ pub struct FileNode
 #[derive(Debug)]
 pub struct Program
 {
-    pub files: Vec<FileNode>,
+    pub files: Vec<Arc<FileNode>>,
 }

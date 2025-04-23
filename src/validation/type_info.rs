@@ -1,11 +1,9 @@
-use std::collections::HashMap;
-
 use itertools::Itertools;
 use uuid::Uuid;
 
 use crate::{parsing::ast::TypeName, utils::FileInfo};
 
-use super::{ResolverResult, TypeError, TypeLibrary, TypeResolver};
+use super::{builtins::VOID_TYPE, TypeError, TypeLibrary, TypeResolver};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TypeInfo
@@ -16,7 +14,7 @@ pub enum TypeInfo
     Function
     {
         args: Vec<TypeInfo>,
-        returned: Option<Box<TypeInfo>>,
+        returned: Box<TypeInfo>,
     }
 }
 
@@ -40,7 +38,7 @@ impl TypeInfo
 
                 if let Some(Err(err)) = returned { return Err(err) }
 
-                Ok(Self::Function { args, returned: returned.map(|r| Box::new(r.unwrap())) })
+                Ok(Self::Function { args, returned: returned.map(|r| Box::new(r.unwrap())).unwrap_or(Box::new(VOID_TYPE.clone())) })
             },
             TypeName::Optional { question_mark: _, type_name } => {
                 let inner = Self::from(type_name, resolver, usings, file)?;
@@ -57,14 +55,19 @@ impl TypeInfo
             TypeInfo::Optional(type_info) => format!("?{}", type_info.pretty_print(library)),
             TypeInfo::Array(type_info) => format!("[]{}", type_info.pretty_print(library)),
             TypeInfo::Function { args, returned } => {
-                let mut str = format!("Fn({})", args.iter().map(|a| a.pretty_print(library)).join(", "));
-                if let Some(ret) = returned
-                {
-                    str += &format!(" -> {}", ret.pretty_print(library));
-                }
-
-                str
+                let args = args.iter().map(|a| a.pretty_print(library)).join(", ");
+                let returned = returned.pretty_print(library);
+                format!("Fn({}) -> {}", args, returned)
             },
+        }
+    }
+
+    pub fn is_fn(&self) -> bool 
+    {
+        match self 
+        {
+            TypeInfo::Function { args: _, returned: _ } => true,
+            _ => false,
         }
     }
 }

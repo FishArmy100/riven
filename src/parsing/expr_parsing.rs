@@ -187,7 +187,6 @@ fn parse_primary(reader: &mut TokenReader) -> ParserResult<Option<Expression>>
         TokenType::IntegerLiteral,
         TokenType::StringLiteral,
         TokenType::FloatLiteral,
-        TokenType::Identifier,
         TokenType::SelfVal,
         TokenType::True,
         TokenType::False,
@@ -195,6 +194,10 @@ fn parse_primary(reader: &mut TokenReader) -> ParserResult<Option<Expression>>
     ])
     {
         Ok(Some(Expression::Literal(literal)))
+    }
+    else if let Some(identifier) = reader.check(TokenType::Identifier)
+    {
+        Ok(Some(Expression::Identifier(identifier)))
     }
     else 
     {
