@@ -183,7 +183,7 @@ impl TypedExpression
                     return Err(TypeError::InvalidCallArgs(arg_names, loc));
                 };
 
-                if let TypedExpression::Identifier { id: TypedIdentifier::Function(id), returned } = &expr {
+                if let TypedExpression::Identifier { id: TypedIdentifier::Function(id), returned: _ } = &expr {
                     let def = args.func_library.get_func(id);
                     let param_count = def.parameters.len();
 
