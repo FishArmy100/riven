@@ -6,7 +6,30 @@ use uuid::Uuid;
 
 use crate::{lexing::token::Token, parsing::ast::{BlockStmt, Declaration, FileNode, FnDecl}, utils::FileInfo};
 
-use super::{ast::{stmt::TypedStatement, ExprCheckArgs}, builtins::VOID_TYPE, type_info::TypeInfo, Initializer, TypeError, TypeResolver};
+use super::{ast::{stmt::TypedStatement, ExprCheckArgs}, builtins::VOID_TYPE, type_info::TypeInfo, var::VarDef, Initializer, TypeError, TypeResolver};
+
+#[derive(Debug, Clone)]
+pub enum FuncBody
+{
+    AST(Arc<BlockStmt>),
+    Built 
+    {
+        variables: Arc<HashMap<Uuid, VarDef>>,
+        body: Arc<TypedStatement>,
+    }
+}
+
+impl FuncBody 
+{
+    pub fn built(&self) -> (&HashMap<Uuid, VarDef>, &TypedStatement)
+    {
+        match self 
+        {
+            Self::Built { variables, body } => (&variables, &body),
+            _ => panic!("Trying to access un-built function data")
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct FuncParam
@@ -24,6 +47,7 @@ pub struct FuncDef
     pub parameters: Vec<FuncParam>,
     pub returned: TypeInfo,
     pub is_pub: bool,
+    pub body: FuncBody,
 }
 
 impl FuncDef
@@ -67,6 +91,7 @@ impl FuncDef
             parameters,
             returned,
             is_pub: decl.pub_tok.is_some(),
+            body: FuncBody::AST(decl.body.clone())
         })
     }
 

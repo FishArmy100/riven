@@ -101,7 +101,7 @@ pub struct FnDecl
     pub params: Vec<FnParam>,
     pub close_paren: Token,
     pub return_type: Option<(Token, TypeName)>,
-    pub body: BlockStmt, // either has a body or a ';'
+    pub body: Arc<BlockStmt>, // either has a body or a ';'
 }
 
 #[derive(Debug, Clone)]

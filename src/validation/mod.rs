@@ -17,6 +17,7 @@ pub use types::*;
 
 use itertools::Itertools;
 use operators::GlobalOperators;
+use uuid::Uuid;
 use var::VariableStack;
 
 use crate::{parsing::ast::{Expression, FileNode, Program}, utils::{FileInfo, TextLoc, TextPos}};

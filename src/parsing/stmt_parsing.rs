@@ -385,7 +385,7 @@ fn parse_fn_decl(reader: &mut TokenReader) -> ParserResult<Option<FnDecl>>
         params, 
         close_paren, 
         return_type,
-        body 
+        body: Arc::new(body),
     }))
 }
 
