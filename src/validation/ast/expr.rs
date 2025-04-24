@@ -177,9 +177,51 @@ impl TypedExpression
             Expression::Call(CallExpr { expression, open_paren, args: call_args, close_paren }) => {
                 let expr = TypedExpression::check_expr(&expression, args)?;
 
-                // if let TypedExpression::Identifier { id: TypedIdentifier::Function(id), returned } = &expr {
+                let throw_error = |infos: Vec<TypeInfo>| -> Result<TypedExpression, TypeError> {
+                    let arg_names = infos.into_iter().map(|i| i.pretty_print(args.type_library)).collect();
+                    let loc = (open_paren.pos + close_paren.pos).get_loc(args.file);
+                    return Err(TypeError::InvalidCallArgs(arg_names, loc));
+                };
 
-                // }
+                if let TypedExpression::Identifier { id: TypedIdentifier::Function(id), returned } = &expr {
+                    let def = args.func_library.get_func(id);
+                    let param_count = def.parameters.len();
+
+                    if call_args.len() > param_count
+                    {
+                        return throw_error(def.parameters.iter().map(|p| p.type_info.clone()).collect());
+                    }
+
+                    let mut checked_args = vec![];
+                    for i in 0..param_count
+                    {
+                        let p = &def.parameters[i];
+                        if p.initializer.has_init() && i == call_args.len()
+                        {
+                            break;
+                        }
+
+                        if call_args.len() <= i 
+                        {
+                            return throw_error(def.parameters.iter().map(|p| p.type_info.clone()).collect());
+                        }
+
+                        let a = TypedExpression::check_expr(&call_args[i], args)?;
+
+                        if p.type_info != *a.returned()
+                        {
+                            return throw_error(def.parameters.iter().map(|p| p.type_info.clone()).collect());
+                        }
+
+                        checked_args.push(a);
+                    }
+                    
+                    return Ok(TypedExpression::Call { 
+                        called: Box::new(expr), 
+                        args: checked_args,
+                        returned: def.returned.clone()
+                    });
+                }
 
                 let TypeInfo::Function { args: fn_args, returned } = &expr.returned() else {
                     return Err(TypeError::ExpectedFunction(expression.get_pos().get_loc(args.file)));
@@ -187,9 +229,7 @@ impl TypedExpression
 
                 if call_args.len() != fn_args.len()
                 {
-                    let arg_names = fn_args.iter().map(|a| a.pretty_print(args.type_library)).collect();
-                    let loc = (open_paren.pos + close_paren.pos).get_loc(args.file);
-                    return Err(TypeError::InvalidCallArgs(arg_names, loc));
+                    return throw_error(fn_args.clone());
                 }
 
                 let call_args = call_args.iter().map(|c| {
@@ -200,9 +240,7 @@ impl TypedExpression
                     c.returned() == f
                 })
                 {
-                    let arg_names = fn_args.iter().map(|a| a.pretty_print(args.type_library)).collect();
-                    let loc = (open_paren.pos + close_paren.pos).get_loc(args.file);
-                    return Err(TypeError::InvalidCallArgs(arg_names, loc));
+                    return throw_error(fn_args.clone());
                 }
                 
                 let returned = (**returned).clone();

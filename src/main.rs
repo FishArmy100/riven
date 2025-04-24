@@ -5,7 +5,7 @@ use itertools::Itertools;
 use parsing::ast::Program;
 use utils::FileInfo;
 use validation::{ast::{ExprCheckArgs, TypedExpression}, builtins, functions::FuncLibraryBuilder, TypeLibraryBuilder, TypeResolver, ValidationContext};
-// use validation::StructDef;
+use validation::StructDef;
 
 pub mod lexing;
 pub mod utils;
@@ -24,6 +24,11 @@ fn main()
         fn test(t: Test = Test { name: \"Nate\" }) -> Int
         {
 
+        }
+
+        fn build(a: Int, b: Float = 4.5, c: Int = 5) -> Int
+        {
+            return 7;
         }
         ", "src".into());
     let file = compiler::run_parser(Arc::new(file)).unwrap();
@@ -47,7 +52,7 @@ fn main()
 
     println!("Context compiled");
 
-    let src = "test(Test { name: \"Nate Craver\" })";
+    let src = "build(5)";
     let file = &FileInfo::from_text(src, "src".into());
     let expression = compiler::run_expression_parser(file).unwrap();
 
