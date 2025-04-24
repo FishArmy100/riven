@@ -48,7 +48,7 @@ pub struct ConstStmt
 #[derive(Debug, Clone)]
 pub struct AssignStmt
 {
-    pub value: Expression,
+    pub value: Token,
     pub equal: Token,
     pub expression: Expression,
     pub semi_colon: Token,

@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use uuid::Uuid;
 
-use crate::{lexing::{self, token::{Token, TokenType}}, parsing::{self, ast::{Expression, FileNode}, token_reader::TokenReader, ParserError}, utils::{FileInfo, PathInfo, TextLoc, TextPos}};
+use crate::{lexing::{self, token::{Token, TokenType}}, parsing::{self, ast::{BlockStmt, Expression, FileNode}, token_reader::TokenReader, ParserError}, utils::{FileInfo, PathInfo, TextLoc, TextPos}};
 
 pub trait CompilerError
 {
@@ -48,6 +48,19 @@ pub fn run_expression_parser(file: &FileInfo) -> Result<Expression, Vec<String>>
     let tokens = run_lexer(file)?;
     let mut reader = TokenReader::new(&tokens, file, None);
     match parsing::expect_expression(&mut reader, parsing::parse_expression)
+    {
+        Ok(ok) => Ok(ok),
+        Err(err) => {
+            Err(vec![err.format_error()])
+        }
+    }
+}
+
+pub fn run_block_parser(file: &FileInfo) -> Result<BlockStmt, Vec<String>>
+{
+    let tokens = run_lexer(file)?;
+    let mut reader = TokenReader::new(&tokens, file, None);
+    match parsing::expect_block_stmt(&mut reader)
     {
         Ok(ok) => Ok(ok),
         Err(err) => {

@@ -536,8 +536,9 @@ pub fn parse_use_stmt(reader: &mut TokenReader) -> ParserResult<Option<UseStmt>>
 
 fn parse_assignment(reader: &mut TokenReader) -> ParserResult<Option<AssignStmt>>
 {
-    if let Some(value) = is_expression_and(reader, |r| r.current_is(ASSIGNMENT_TOKENS))
+    if reader.current_is(&[TokenType::Identifier]) && reader.peek_many_is(1, ASSIGNMENT_TOKENS)
     {
+        let value = reader.advance().unwrap();
         let equal = reader.advance().unwrap();
         let expression = expect_expression(reader, parse_expression)?;
         let semi_colon = reader.expect(TokenType::SemiColon)?;

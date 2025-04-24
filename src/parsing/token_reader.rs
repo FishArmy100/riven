@@ -96,6 +96,11 @@ impl<'a> TokenReader<'a>
         self.peek(count).is_some_and(|token| token.token_type == t)
     }
 
+    pub fn peek_many_is(&self, count: usize, types: &[TokenType]) -> bool
+    {
+        types.iter().any(|t| self.peek_is(count, *t))
+    }
+
     pub fn peek_sequence_is(&self, count: usize, types: &[TokenType]) -> bool
     {
         (0..types.len()).map(|i| self.peek_is(count + i, types[i])).all(|b| b)

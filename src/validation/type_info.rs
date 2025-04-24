@@ -70,4 +70,27 @@ impl TypeInfo
             _ => false,
         }
     }
+    
+    pub fn is_iter(&self) -> bool
+    {
+        self.get_iter_type().is_some()
+    }
+
+    pub fn get_iter_type(&self) -> Option<TypeInfo>
+    {
+        let TypeInfo::Function { args, returned } = self else {
+            return None;
+        };
+
+        if args.len() != 0
+        {
+            return None;
+        }
+
+        let TypeInfo::Optional(t) = returned.as_ref() else {
+            return None;
+        };
+
+        Some(t.as_ref().clone())
+    }
 }

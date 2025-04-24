@@ -4,9 +4,9 @@ use either::Either::{self, Left, Right};
 use itertools::Itertools;
 use uuid::Uuid;
 
-use crate::{lexing::token::Token, parsing::ast::{Declaration, FileNode, FnDecl}, utils::FileInfo};
+use crate::{lexing::token::Token, parsing::ast::{BlockStmt, Declaration, FileNode, FnDecl}, utils::FileInfo};
 
-use super::{ast::ExprCheckArgs, builtins::VOID_TYPE, type_info::TypeInfo, Initializer, TypeError, TypeResolver};
+use super::{ast::{stmt::TypedStatement, ExprCheckArgs}, builtins::VOID_TYPE, type_info::TypeInfo, Initializer, TypeError, TypeResolver};
 
 #[derive(Debug, Clone)]
 pub struct FuncParam

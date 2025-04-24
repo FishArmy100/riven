@@ -5,85 +5,21 @@ pub mod operators;
 pub mod functions;
 pub mod types;
 pub mod var;
+pub mod type_error;
 
 use std::{collections::HashSet, sync::Arc};
 
-use ast::{ExprCheckArgs, TypedExpression};
+use ast::{stmt::StmtCheckArgs, ExprCheckArgs, TypedExpression};
 use functions::{FuncLibrary, FuncLibraryBuilder};
+use type_error::TypeError;
 use type_info::TypeInfo;
 pub use types::*;
 
 use itertools::Itertools;
-use operators::{BinaryOpType, GlobalOperators, UnaryOpType};
+use operators::GlobalOperators;
+use var::VariableStack;
 
-use crate::{compiler::CompilerError, lexing::token::Token, parsing::ast::{Expression, FileNode, Program}, utils::{FileInfo, TextLoc, TextPos}};
-
-#[derive(Debug, Clone)]
-pub enum TypeError
-{
-    UnknownType(Token, TextLoc),
-    DuplicateTypeDef(Token, TextLoc),
-    UnknownUsing(Vec<String>, TextLoc),
-    ConflictingTypes(Token, TextLoc),
-    NoBinaryOp(BinaryOpType, String, String, TextLoc),
-    NoUnaryOp(UnaryOpType, String, TextLoc),
-    CannotConstruct(String, TextLoc),
-    InvalidConstructionArgs(TextLoc),
-    ConflictingFunctions(Token, TextLoc),
-    UndefinedFunction(Token, TextLoc),
-    ExpectedType(String, TextLoc),
-    FunctionArgumentNeedsInitializer(TextLoc),
-    UnknownIdentifier(String, TextLoc),
-    ExpectedFunction(TextLoc),
-    InvalidCallArgs(Vec<String>, TextLoc),
-}
-
-impl CompilerError for TypeError
-{
-    fn msg(&self) -> String 
-    {
-        match self 
-        {
-            TypeError::UnknownType(token, _) => format!("Unknown type {}", token.value_string().unwrap()),
-            TypeError::DuplicateTypeDef(token, _) => format!("Duplicate type {}", token.value_string().unwrap()),
-            TypeError::UnknownUsing(path, _) => format!("Using path {} does not exist", path.iter().join(".")),
-            TypeError::ConflictingTypes(token, _) => format!("Conflicting type definitions for {}", token.value_string().unwrap()),
-            TypeError::NoBinaryOp(op, left, right, _) => format!("No binary operator {} for types {} and {}", op.to_string(), left, right),
-            TypeError::NoUnaryOp(op, t, _) => format!("No unary operator {} for type {}", op.to_string(), t),
-            TypeError::CannotConstruct(t, _) => format!("Cannot construct type {}", t),
-            TypeError::InvalidConstructionArgs(_) => format!("Invalid construction args"),
-            TypeError::ConflictingFunctions(token, _) => format!("Conflicting function definitions for {}", token.value_string().unwrap()),
-            TypeError::UndefinedFunction(token, _) => format!("Unknown type {}", token.value_string().unwrap()),
-            TypeError::ExpectedType(t, _) => format!("Expected type {}", t),
-            TypeError::FunctionArgumentNeedsInitializer(_) => format!("Must have a function initializer"),
-            TypeError::UnknownIdentifier(id, _) => format!("Unknown identifier {}", id),
-            TypeError::ExpectedFunction(_) => format!("Expected a function"),
-            TypeError::InvalidCallArgs(items, _) => format!("Expected call args: {}", items.iter().join(", ")),
-        }
-    }
-
-    fn loc(&self) -> TextLoc 
-    {
-        match self 
-        {
-            TypeError::UnknownType(_, loc) => loc.clone(),
-            TypeError::DuplicateTypeDef(_, loc) => loc.clone(),
-            TypeError::UnknownUsing(_, loc) => loc.clone(),
-            TypeError::ConflictingTypes(_, loc) => loc.clone(),
-            TypeError::NoBinaryOp(_, _, _, loc) => loc.clone(),
-            TypeError::NoUnaryOp(_, _, loc) => loc.clone(),
-            TypeError::CannotConstruct(_, loc) => loc.clone(),
-            TypeError::InvalidConstructionArgs(loc) => loc.clone(),
-            TypeError::ConflictingFunctions(_, loc) => loc.clone(),
-            TypeError::UndefinedFunction(_, loc) => loc.clone(),
-            TypeError::ExpectedType(_, loc) => loc.clone(),
-            TypeError::FunctionArgumentNeedsInitializer(loc) => loc.clone(),
-            TypeError::UnknownIdentifier(_, loc) => loc.clone(),
-            TypeError::ExpectedFunction(loc) => loc.clone(),
-            TypeError::InvalidCallArgs(_, loc) => loc.clone(),
-        }
-    }
-}
+use crate::{parsing::ast::{Expression, FileNode, Program}, utils::{FileInfo, TextLoc, TextPos}};
 
 pub struct ValidationContext
 {
@@ -99,6 +35,7 @@ impl ValidationContext
         let type_library = build_type_library(program)?;
         let operators = builtins::get_operators();
         let func_library = build_func_library(program, type_library.resolver())?;
+        let var_stack = VariableStack::new();
 
         let mut errors = vec![];
         let all_paths = get_all_file_paths(program);
@@ -114,6 +51,7 @@ impl ValidationContext
                 file: &file.info,
                 usings: &usings,
                 func_library: &func_library,
+                var_stack: &var_stack,
             };
 
             if let Err(e) = type_library.build_initializers(args)
@@ -139,14 +77,27 @@ impl ValidationContext
         })
     }
 
-    pub fn get_check_args<'a>(&'a self, usings: &'a [Vec<String>], file: &'a FileInfo) -> ExprCheckArgs<'a>
+    pub fn get_check_args<'a>(&'a self, usings: &'a [Vec<String>], file: &'a FileInfo, var_stack: &'a VariableStack) -> ExprCheckArgs<'a>
     {
         ExprCheckArgs { 
             operators: &self.operators, 
             type_library: &self.type_library, 
             func_library: &self.func_library,
             file, 
-            usings
+            usings,
+            var_stack,
+        }
+    }
+
+    pub fn check_stmt_args<'a>(&'a self, usings: &'a [Vec<String>], file: &'a FileInfo, var_stack: &'a mut VariableStack) -> StmtCheckArgs<'a>
+    {
+        StmtCheckArgs { 
+            operators: &self.operators, 
+            type_library: &self.type_library, 
+            func_library: &self.func_library,
+            file, 
+            usings,
+            var_stack,
         }
     }
 }

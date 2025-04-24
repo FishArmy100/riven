@@ -6,15 +6,13 @@ pub mod ast;
 
 use std::sync::Arc;
 
-use stmt_parsing::{parse_declaration, parse_use_stmt};
 pub use type_parsing::*;
 pub use expr_parsing::*;
+pub use stmt_parsing::*;
 
 use token_reader::TokenReader;
-use uuid::Uuid;
 use crate::{compiler::CompilerError, lexing::token::{Token, TokenType}, utils::{FileInfo, PathInfo, TextLoc}};
 use self::ast::*;
-use crate::utils::TextPos;
 
 #[derive(Debug, Clone)]
 pub enum ParserError

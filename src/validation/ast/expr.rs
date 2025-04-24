@@ -2,12 +2,13 @@ use std::collections::HashMap;
 
 use uuid::Uuid;
 
-use crate::{lexing::token::{Token, TokenValue}, parsing::ast::{BinaryExpr, CallExpr, ConstructionArg, ConstructionExpr, Expression, UnaryExpr}, utils::{FileInfo, TextPos}, validation::{builtins::{BOOL_TYPE, FLOAT_TYPE, INT_TYPE, STRING_TYPE}, functions::{FuncLibrary, FuncResolverResult}, operators::{BinaryOpType, GlobalOperators, UnaryOpType}, type_info::TypeInfo, StructDef, TypeError, TypeLibrary}};
+use crate::{lexing::token::{Token, TokenValue}, parsing::ast::{BinaryExpr, CallExpr, ConstructionArg, ConstructionExpr, Expression, UnaryExpr}, utils::{FileInfo, TextPos}, validation::{builtins::{BOOL_TYPE, FLOAT_TYPE, INT_TYPE, STRING_TYPE}, functions::{FuncLibrary, FuncResolverResult}, operators::{BinaryOpType, GlobalOperators, UnaryOpType}, type_info::TypeInfo, var::VariableStack, StructDef, TypeError, TypeLibrary}};
 
 #[derive(Debug)]
 pub enum TypedIdentifier
 {
     Function(Uuid),
+    Variable(Uuid),
 }
 
 #[derive(Debug)]
@@ -73,6 +74,7 @@ pub struct ExprCheckArgs<'a>
     pub operators: &'a GlobalOperators,
     pub type_library: &'a TypeLibrary,
     pub func_library: &'a FuncLibrary,
+    pub var_stack: &'a VariableStack,
     pub file: &'a FileInfo,
     pub usings: &'a [Vec<String>],
 }
@@ -81,12 +83,24 @@ impl<'a> ExprCheckArgs<'a>
 {
     pub fn resolve_name(&self, token: &Token) -> Result<TypedIdentifier, TypeError>
     {
+        if let Some(var) = self.var_stack.resolve_var(token.value_string().unwrap())
+        {
+            return Ok(TypedIdentifier::Variable(var));
+        }
+        
         match self.func_library.resolver().resolve(token, self.usings)
         {
-            FuncResolverResult::Undefined(token) => Err(TypeError::UnknownIdentifier(token.value_string().unwrap().clone(), token.get_loc(self.file))),
-            FuncResolverResult::ConflictingFunctions(token) => Err(TypeError::ConflictingFunctions(token.clone(), token.get_loc(self.file))),
-            FuncResolverResult::Ok(uuid) => Ok(TypedIdentifier::Function(uuid)),
+            FuncResolverResult::ConflictingFunctions(token) => {
+                return Err(TypeError::ConflictingFunctions(token.clone(), token.get_loc(self.file)));
+            },
+            FuncResolverResult::Ok(uuid) => {
+                return Ok(TypedIdentifier::Function(uuid));
+            },
+            _ => {}
         }
+
+        let err = TypeError::UnknownIdentifier(token.value_string().unwrap().clone(), token.get_loc(self.file));
+        Err(err)
     }
 }
 
@@ -170,6 +184,7 @@ impl TypedExpression
 
                 let returned = match &id {
                     TypedIdentifier::Function(id) => args.func_library.get_func(id).get_type_info(),
+                    TypedIdentifier::Variable(id) => args.var_stack.get_var(id).type_info.clone(),
                 };
 
                 Ok(TypedExpression::Identifier { id, returned })

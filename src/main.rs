@@ -4,7 +4,7 @@ use compiler::CompilerError;
 use itertools::Itertools;
 use parsing::ast::Program;
 use utils::FileInfo;
-use validation::{ast::{ExprCheckArgs, TypedExpression}, builtins, functions::FuncLibraryBuilder, TypeLibraryBuilder, TypeResolver, ValidationContext};
+use validation::{ast::{stmt::TypedStatement, ExprCheckArgs, TypedExpression}, builtins, functions::FuncLibraryBuilder, var::VariableStack, TypeLibraryBuilder, TypeResolver, ValidationContext};
 use validation::StructDef;
 
 pub mod lexing;
@@ -52,18 +52,36 @@ fn main()
 
     println!("Context compiled");
 
-    let src = "build(5)";
+    let src = "
+    {
+        let x = 5;
+        let y = x * 2;
+        let t = Test {
+            name: \"Nate Craver\",
+            age: y
+        };
+    }
+    ";
     let file = &FileInfo::from_text(src, "src".into());
-    let expression = compiler::run_expression_parser(file).unwrap();
+    let block = compiler::run_block_parser(file).unwrap();
 
     let usings = vec![vec!["src".into()]];
-    let args = context.get_check_args(&usings, &file);
+    let mut var_stack = VariableStack::new();
+    let mut args = context.check_stmt_args(&usings, &file, &mut var_stack);
 
-    let expression = TypedExpression::check_expr(&expression, args);
+    let expression = TypedStatement::check_block(&block, &mut args);
 
     match expression
     {
-        Ok(ok) => println!("{:#?}", ok),
-        Err(error) => println!("{}", error.format_error()),
+        Ok(ok) => {
+            println!("Variables: \n{:#?}", var_stack);
+            println!("{:#?}", ok)
+        },
+        Err(errors) => {
+            for e in errors
+            {
+                println!("{}", e.format_error())
+            }
+        },
     }
 }
