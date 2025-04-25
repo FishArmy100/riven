@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use uuid::Uuid;
 
-use crate::{parsing::ast::{FileNode, FnDecl}, validation::{builtins::VOID_TYPE, type_error::TypeError}};
+use crate::{parsing::ast::{Declaration, Expression, FileNode, FnDecl}, validation::{builtins::VOID_TYPE, type_error::TypeError}};
 
 use super::{types::TypeInfo, FuncResolver, TypeResolver};
 
@@ -12,7 +12,7 @@ pub struct FuncInfoParam
 {
     pub name: String,
     pub type_info: TypeInfo,
-    pub has_init: bool
+    pub init: Option<Arc<Expression>>
 }
 
 #[derive(Debug, Clone)]
@@ -24,25 +24,51 @@ pub struct FuncInfo
     pub returned: TypeInfo,
     pub is_pub: bool,
     pub decl: Arc<FnDecl>,
+    pub file: Arc<FileNode>
 }
 
 impl FuncInfo
 {
-    pub fn new(decl: Arc<FnDecl>, resolver: &TypeResolver, func_resolver: &FuncResolver, file: &FileNode) -> Result<Self, TypeError>
+    pub fn from_file(type_resolver: &TypeResolver, func_resolver: &FuncResolver, file: Arc<FileNode>) -> Result<Vec<Self>, Vec<TypeError>>
+    {
+        let mut errors = vec![];
+        let mut infos = vec![];
+
+        for d in &file.declarations
+        {
+            if let Declaration::Fn(s) = d 
+            {
+                match Self::new(s.clone(), type_resolver, func_resolver, file.clone())
+                {
+                    Ok(ok) => infos.push(ok),
+                    Err(e) => errors.push(e),
+                }
+            }
+        }
+
+        if errors.len() > 0
+        {
+            return Err(errors);
+        }
+
+        Ok(infos)
+    }
+    
+    pub fn new(decl: Arc<FnDecl>, resolver: &TypeResolver, func_resolver: &FuncResolver, file: Arc<FileNode>) -> Result<Self, TypeError>
     {
         let name = decl.id.value_string().unwrap().clone();
         let id = func_resolver.get_func_id(&file.info.path.split_relative(), &name).unwrap();
         let mut has_init = false;
 
         let parameters = decl.params.iter().map(|p| {
-            let type_info = TypeInfo::from(&p.type_name, resolver, file)?;
-            let m_has_init = p.default_value.is_some();
-            if m_has_init
+            let type_info = TypeInfo::from(&p.type_name, resolver, &file)?;
+            let m_has_init = p.default_value.as_ref().map(|v| v.1.clone());
+            if m_has_init.is_some()
             {
                 has_init = true;
             }
 
-            if has_init && !m_has_init
+            if has_init && !m_has_init.is_some()
             {
                 return Err(TypeError::FunctionArgumentNeedsInitializer((p.id.pos + p.type_name.get_pos()).get_loc(&file.info)))
             }
@@ -50,12 +76,12 @@ impl FuncInfo
             Ok(FuncInfoParam {
                 name: p.id.value_string().unwrap().clone(),
                 type_info,
-                has_init: m_has_init,
+                init: m_has_init,
             })
         }).collect::<Result<Vec<_>, _>>()?;
 
         let returned = match &decl.return_type {
-            Some((_, type_name)) => TypeInfo::from(&type_name, resolver, file)?,
+            Some((_, type_name)) => TypeInfo::from(&type_name, resolver, &file)?,
             None => VOID_TYPE.clone(),
         };
 
@@ -65,7 +91,8 @@ impl FuncInfo
             parameters,
             returned,
             is_pub: decl.pub_tok.is_some(),
-            decl
+            decl,
+            file
         })
     }
 

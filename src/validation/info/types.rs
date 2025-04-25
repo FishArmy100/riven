@@ -1,9 +1,11 @@
+use std::collections::HashMap;
+
 use itertools::Itertools;
 use uuid::Uuid;
 
 use crate::{parsing::ast::{FileNode, TypeName}, utils::FileInfo, validation::{builtins::VOID_TYPE, type_error::TypeError}};
 
-use super::TypeResolver;
+use super::{struct_info::StructInfo, TypeResolver};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TypeInfo
@@ -47,16 +49,16 @@ impl TypeInfo
         }
     }
 
-    pub fn pretty_print(&self, library: &TypeLibrary) -> String 
+    pub fn pretty_print(&self, structs: &HashMap<Uuid, StructInfo>) -> String 
     {
         match self 
         {
-            TypeInfo::Primary(uuid) => library.get_type(uuid).name.clone(),
-            TypeInfo::Optional(type_info) => format!("?{}", type_info.pretty_print(library)),
-            TypeInfo::Array(type_info) => format!("[]{}", type_info.pretty_print(library)),
+            TypeInfo::Primary(uuid) => structs.get(uuid).unwrap().name.clone(),
+            TypeInfo::Optional(type_info) => format!("?{}", type_info.pretty_print(structs)),
+            TypeInfo::Array(type_info) => format!("[]{}", type_info.pretty_print(structs)),
             TypeInfo::Function { args, returned } => {
-                let args = args.iter().map(|a| a.pretty_print(library)).join(", ");
-                let returned = returned.pretty_print(library);
+                let args = args.iter().map(|a| a.pretty_print(structs)).join(", ");
+                let returned = returned.pretty_print(structs);
                 format!("Fn({}) -> {}", args, returned)
             },
         }

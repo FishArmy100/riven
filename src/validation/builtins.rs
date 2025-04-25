@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use uuid::Uuid;
 
-use super::{operators::{BinaryOp, BinaryOpType, GlobalOperators, UnaryOp, UnaryOpType}, type_info::TypeInfo, StructDef};
+use super::{defs::struct_def::StructDef, info::types::TypeInfo, operators::{BinaryOp, BinaryOpType, GlobalOperators, UnaryOp, UnaryOpType}};
 
 pub const INT_TYPE_NAME: &str = "Int";
 pub const FLOAT_TYPE_NAME: &str = "Float";
@@ -30,35 +30,35 @@ pub fn get_builtins() -> Vec<StructDef>
     let int_type = StructDef {
         name: INT_TYPE_NAME.into(),
         id: INT_ID.clone(),
-        members: HashMap::new(),
+        members: vec![],
         is_pub: true,
     };
 
     let float_type = StructDef {
         name: FLOAT_TYPE_NAME.into(),
         id: FLOAT_ID.clone(),
-        members: HashMap::new(),
+        members: vec![],
         is_pub: true,
     };
 
     let bool_type = StructDef {
         name: BOOL_TYPE_NAME.into(),
         id: BOOL_ID.clone(),
-        members: HashMap::new(),
+        members: vec![],
         is_pub: true,
     };
 
     let string_type = StructDef {
         name: STRING_TYPE_NAME.into(),
         id: STRING_ID.clone(),
-        members: HashMap::new(),
+        members: vec![],
         is_pub: true,
     };
 
     let void_type = StructDef {
         name: VOID_TYPE_NAME.into(),
         id: VOID_ID.clone(),
-        members: HashMap::new(),
+        members: vec![],
         is_pub: true,
     };
 

@@ -1,8 +1,11 @@
-
-pub struct String {}
-
-struct Board
+struct Test { name: String, age: Int = 5 }
+        
+fn test(t: Test) -> Int
 {
-    board: []String = "ddd",
-    current_player: String,
+
+}
+
+fn build(a: Int, b: Float = 4.5, c: Int = 5) -> Int
+{
+    return 7;
 }

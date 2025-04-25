@@ -1,17 +1,14 @@
 use either::Either::{Left, Right};
 use uuid::Uuid;
-use crate::{parsing::ast::{BlockStmt, ElseBranch, IfStmt, Statement}, utils::FileInfo, validation::{builtins::BOOL_TYPE, functions::FuncLibrary, operators::GlobalOperators, var::{VarDef, VariableStack}, TypeError, TypeLibrary}};
+use crate::{parsing::ast::{BlockStmt, ElseBranch, FileNode, IfStmt, Statement}, utils::FileInfo, validation::{builtins::BOOL_TYPE, defs::var_def::{VarDef, VariableStack}, info::InfoContext, operators::GlobalOperators, TypeError}};
 
 use super::{ExprCheckArgs, TypedExpression};
 
 pub struct StmtCheckArgs<'a>
 {
     pub operators: &'a GlobalOperators,
-    pub type_library: &'a TypeLibrary,
-    pub func_library: &'a FuncLibrary,
-    pub file: &'a FileInfo,
-    pub usings: &'a [Vec<String>],
-
+    pub context: &'a InfoContext,
+    pub file: &'a FileNode,
     pub var_stack: &'a mut VariableStack,
 }
 
@@ -21,11 +18,9 @@ impl<'a> StmtCheckArgs<'a>
     {
         ExprCheckArgs { 
             operators: self.operators, 
-            type_library: self.type_library, 
-            func_library: self.func_library, 
+            context: self.context,
             var_stack: &self.var_stack, 
             file: self.file, 
-            usings: self.usings,
         }
     }
 }
@@ -101,8 +96,8 @@ impl TypedStatement
                 
                 if !condition.as_ref().is_some_and(|e| *e.returned() != *BOOL_TYPE)
                 {
-                    let name = BOOL_TYPE.pretty_print(eval_args.type_library);
-                    let loc = while_stmt.while_tok.get_loc(eval_args.file);
+                    let name = BOOL_TYPE.pretty_print(&eval_args.context.structs);
+                    let loc = while_stmt.while_tok.get_loc(&eval_args.file.info);
                     errors.push(TypeError::ExpectedType(name, loc));
                 }
 
@@ -136,8 +131,8 @@ impl TypedStatement
 
                 if !condition.as_ref().is_some_and(|e| !e.returned().is_iter())
                 {
-                    let name = BOOL_TYPE.pretty_print(eval_args.type_library);
-                    let loc = for_stmt.for_tok.get_loc(eval_args.file);
+                    let name = BOOL_TYPE.pretty_print(&eval_args.context.structs);
+                    let loc = for_stmt.for_tok.get_loc(&eval_args.file.info);
                     errors.push(TypeError::ExpectedType(name, loc));
                 }
 
@@ -185,7 +180,7 @@ impl TypedStatement
             Statement::Assign(assign_stmt) => {
                 let var_name = assign_stmt.value.value_string().unwrap().clone();
                 let Some(id) = eval_args.var_stack.resolve_var(&var_name) else {
-                    return Err(vec![TypeError::UnknownVariable(var_name, assign_stmt.value.get_loc(eval_args.file))]);
+                    return Err(vec![TypeError::UnknownVariable(var_name, assign_stmt.value.get_loc(&eval_args.file.info))]);
                 };
 
                 let var_type = &eval_args.var_stack.get_var(&id).type_info;
@@ -196,8 +191,8 @@ impl TypedStatement
 
                 if expression.returned() != var_type
                 {
-                    let type_name = var_type.pretty_print(eval_args.type_library);
-                    let loc = assign_stmt.expression.get_pos().get_loc(eval_args.file);
+                    let type_name = var_type.pretty_print(&eval_args.context.structs);
+                    let loc = assign_stmt.expression.get_pos().get_loc(&eval_args.file.info);
                     return Err(vec![TypeError::ExpectedType(type_name, loc)])
                 }
 
@@ -226,8 +221,8 @@ impl TypedStatement
         
         if !condition.as_ref().is_some_and(|e| *e.returned() != *BOOL_TYPE)
         {
-            let name = BOOL_TYPE.pretty_print(eval_args.type_library);
-            let loc = stmt.if_tok.get_loc(eval_args.file);
+            let name = BOOL_TYPE.pretty_print(&eval_args.context.structs);
+            let loc = stmt.if_tok.get_loc(&eval_args.file.info);
             errors.push(TypeError::ExpectedType(name, loc));
         }
 

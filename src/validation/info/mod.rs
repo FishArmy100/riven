@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use crate::{lexing::token::Token, parsing::ast::{Declaration, FileNode, Program}, utils::FileInfo};
 
-use super::type_error::TypeError;
+use super::{builtins::{self, BOOL_ID, BOOL_TYPE_NAME, FLOAT_ID, FLOAT_TYPE_NAME, INT_ID, INT_TYPE_NAME, STRING_ID, STRING_TYPE_NAME, VOID_ID, VOID_TYPE_NAME}, operators::GlobalOperators, type_error::TypeError};
 
 pub struct InfoContext
 {
@@ -23,9 +23,54 @@ pub struct InfoContext
 
 impl InfoContext
 {
-    pub fn new(program: Program) -> Result<Self, Vec<TypeError>>
+    pub fn new(program: &Program) -> Result<Self, Vec<TypeError>>
     {
         let mut type_resolver = TypeResolver::new();
+        let mut func_resolver = FuncResolver::new();
+
+        let mut errors = vec![];
+
+        for file in &program.files
+        {
+            if let Err(e) = type_resolver.append_file(file)
+            {
+                errors.extend(e);
+            }
+            if let Err(e) = func_resolver.append_file(file)
+            {
+                errors.extend(e);
+            }
+        }
+
+        let mut structs = HashMap::new();
+        let mut funcs = HashMap::new();
+        
+        for file in &program.files
+        {
+            match StructInfo::from_file(&type_resolver, file.clone())
+            {
+                Ok(ok) => ok.into_iter().for_each(|s| { structs.insert(s.id.clone(), s); }),
+                Err(e) => errors.extend(e),
+            }
+
+            match FuncInfo::from_file(&type_resolver, &func_resolver, file.clone())
+            {
+                Ok(ok) => ok.into_iter().for_each(|f| { funcs.insert(f.id.clone(), f); }),
+                Err(e) => errors.extend(e),
+            }
+        }
+
+        if errors.len() > 0
+        {
+            return Err(errors);
+        }
+
+        Ok(InfoContext { 
+            type_resolver, 
+            structs, 
+            func_resolver, 
+            funcs,
+        })
     }
 }
 
@@ -59,9 +104,15 @@ impl TypeResolver
 {
     pub fn new() -> Self 
     {
-        let mut map = HashMap::new();
+        let mut map = HashMap::<Vec<String>, HashMap<String, Uuid>>::new();
+        let builtins: &mut HashMap<_, _> = map.entry(vec![]).or_default();
+        builtins.insert(INT_TYPE_NAME.to_string(),      *INT_ID);
+        builtins.insert(FLOAT_TYPE_NAME.to_string(),    *FLOAT_ID);
+        builtins.insert(BOOL_TYPE_NAME.to_string(),     *BOOL_ID);
+        builtins.insert(STRING_TYPE_NAME.to_string(),   *STRING_ID);
+        builtins.insert(VOID_TYPE_NAME.to_string(),     *VOID_ID);
         
-        TypeResolver { map: HashMap::new() }
+        TypeResolver { map }
     }
 
     pub fn append_file(&mut self, file: &FileNode) -> Result<(), Vec<TypeError>>

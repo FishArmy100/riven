@@ -131,7 +131,7 @@ impl std::fmt::Display for TextLoc
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result 
     {
-        write!(f, "{}:{}:{}", self.line, self.column, self.file.full_path.as_ref().unwrap_or(&self.file.relative_path))
+        write!(f, "{}:{}:{}", self.file.full_path.as_ref().unwrap_or(&self.file.relative_path), self.line, self.column)
     }
 }
 
@@ -203,12 +203,12 @@ impl FileInfo
         }
     }
 
-    pub fn read(path: &str) -> Result<Self, String>
+    pub fn read(path: &str, code_path: &str) -> Result<Self, String>
     {
         let src = read_file(path)?;
         let path = PathInfo {
             full_path: Some(path.to_string()),
-            relative_path: "".to_string()
+            relative_path: code_path.into()
         };
 
         Ok(Self::new(src, path))
