@@ -1,6 +1,6 @@
 use either::Either::{Left, Right};
 use uuid::Uuid;
-use crate::{parsing::ast::{BlockStmt, ElseBranch, FileNode, IfStmt, Statement}, utils::FileInfo, validation::{builtins::BOOL_TYPE, defs::var_def::{VarDef, VariableStack}, info::InfoContext, operators::GlobalOperators, TypeError}};
+use crate::{parsing::ast::{BlockStmt, ElseBranch, FileNode, IfStmt, Statement}, utils::{FileInfo, TextLoc}, validation::{builtins::{BOOL_TYPE, VOID_TYPE}, defs::var_def::{VarDef, VariableStack}, info::{types::TypeInfo, InfoContext}, operators::GlobalOperators, TypeError}};
 
 use super::{ExprCheckArgs, TypedExpression};
 
@@ -44,7 +44,11 @@ pub enum TypedStatement
     },
     Break,
     Continue,
-    Return(Option<Box<TypedExpression>>),
+    Return
+    {
+        returned: Option<Box<TypedExpression>>,
+        loc: TextLoc,
+    },
     For 
     {
         var_id: Uuid,
@@ -162,12 +166,18 @@ impl TypedStatement
                 let args = eval_args.expr_check_args();
 
                 let Some(expr) = &return_stmt.expression else {
-                    return Ok(TypedStatement::Return(None))
+                    return Ok(TypedStatement::Return{
+                        returned: None,
+                        loc: (return_stmt.return_tok.pos + return_stmt.semi_colon.pos).get_loc(&args.file.info)
+                    })
                 };
 
                 match TypedExpression::check_expr(expr, args)
                 {
-                    Ok(ok) => Ok(TypedStatement::Expr(Box::new(ok))),
+                    Ok(ok) => Ok(TypedStatement::Return {
+                        returned: Some(Box::new(ok)),
+                        loc: (return_stmt.return_tok.pos + return_stmt.semi_colon.pos).get_loc(&args.file.info)
+                    }),
                     Err(err) => Err(vec![err]),
                 }
             },
@@ -288,6 +298,53 @@ impl TypedStatement
         else 
         {
             Ok(Self::Block(statements))    
+        }
+    }
+
+    pub fn check_return(&self, info: &TypeInfo, args: &StmtCheckArgs) -> Result<bool, Vec<TypeError>>
+    {
+        match self 
+        {
+            TypedStatement::Block(typed_statements) => {
+                let mut errors = vec![];
+                let mut returns = false;
+                for stmt in typed_statements
+                {
+                    match stmt.check_return(info, args) 
+                    {
+                        Ok(ok) => returns = returns || ok,
+                        Err(e) => errors.extend(e),
+                    }
+                }
+
+                if errors.len() > 0
+                {
+                    return Err(errors)
+                }
+
+                Ok(returns)
+            },
+            TypedStatement::If { expression: _, body, else_block } => {
+                let body_returns = body.check_return(info, args)?;
+
+                let Some(else_block) = else_block else {
+                    return Ok(false)
+                };
+
+                let else_returns = else_block.check_return(info, args)?;
+                Ok(body_returns && else_returns)
+            },
+            TypedStatement::Return{ returned, loc } => {
+                let returned = returned.as_ref().map_or(&*VOID_TYPE, |e| e.returned());
+                if returned != info
+                {
+                    let name = info.pretty_print(&args.context.structs);
+                    return Err(vec![TypeError::ExpectedType(name, loc.clone())]);
+                }
+
+                Ok(true)
+            },
+            _ => Ok(false)
         }
     }
 }

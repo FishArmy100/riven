@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use itertools::Itertools;
 use uuid::Uuid;
 
-use crate::{parsing::ast::{FileNode, TypeName}, utils::FileInfo, validation::{builtins::VOID_TYPE, type_error::TypeError}};
+use crate::{parsing::ast::{FileNode, TypeName}, validation::{builtins::VOID_TYPE, type_error::TypeError}};
 
 use super::{struct_info::StructInfo, TypeResolver};
 

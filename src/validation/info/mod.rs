@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use crate::{lexing::token::Token, parsing::ast::{Declaration, FileNode, Program}, utils::FileInfo};
 
-use super::{builtins::{self, BOOL_ID, BOOL_TYPE_NAME, FLOAT_ID, FLOAT_TYPE_NAME, INT_ID, INT_TYPE_NAME, STRING_ID, STRING_TYPE_NAME, VOID_ID, VOID_TYPE_NAME}, operators::GlobalOperators, type_error::TypeError};
+use super::{builtins::{BOOL_ID, BOOL_TYPE_NAME, FLOAT_ID, FLOAT_TYPE_NAME, INT_ID, INT_TYPE_NAME, STRING_ID, STRING_TYPE_NAME, VOID_ID, VOID_TYPE_NAME}, operators::GlobalOperators, type_error::TypeError};
 
 pub struct InfoContext
 {

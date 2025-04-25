@@ -5,7 +5,7 @@ use uuid::Uuid;
 use crate::{
     lexing::token::{Token, TokenValue}, 
     parsing::ast::{BinaryExpr, CallExpr, ConstructionArg, ConstructionExpr, Expression, FileNode, UnaryExpr}, 
-    utils::{FileInfo, TextPos}, 
+    utils::{FileInfo, TextLoc, TextPos}, 
     validation::{
         builtins::{BOOL_TYPE, FLOAT_TYPE, INT_TYPE, STRING_TYPE}, defs::var_def::VariableStack, info::{struct_info::StructInfo, types::TypeInfo, FuncResolverResult, InfoContext}, operators::{BinaryOpType, GlobalOperators, UnaryOpType}, TypeError
     }
@@ -24,11 +24,13 @@ pub enum TypedExpression
     Literal
     {
         returned: TypeInfo,
+        loc: TextLoc,
     },
     Identifier
     {
         id: TypedIdentifier,
         returned: TypeInfo,
+        loc: TextLoc,
     },
     Binary 
     {
@@ -36,42 +38,49 @@ pub enum TypedExpression
         op: BinaryOpType,
         right: Box<TypedExpression>,
         returned: TypeInfo,
+        loc: TextLoc,
     },
     Unary 
     {
         operand: Box<TypedExpression>,
         op: UnaryOpType,
         returned: TypeInfo,
+        loc: TextLoc,
     },
     Call
     {
         called: Box<TypedExpression>,
         args: Vec<TypedExpression>,
         returned: TypeInfo,
+        loc: TextLoc,
     },
     Index 
     {
         indexed: Box<TypedExpression>,
         arg: Box<TypedExpression>,
         returned: TypeInfo,
+        loc: TextLoc,
     },
     Access
     {
         accessed: Box<TypedExpression>,
         name: String,
         returned: TypeInfo,
+        loc: TextLoc,
     },
     Cast
     {
         casted: Box<TypedExpression>,
         type_info: TypeInfo,
         returned: TypeInfo,
+        loc: TextLoc,
     },
     Construction 
     {
         type_id: Uuid,
         args: Vec<(String, TypedExpression)>,
         returned: TypeInfo,
+        loc: TextLoc,
     },
 }
 
@@ -124,50 +133,55 @@ impl TypedExpression
                     TokenValue::Bool(_) => BOOL_TYPE.clone(),
                 };
 
-                Ok(TypedExpression::Literal { returned })
+                Ok(TypedExpression::Literal { 
+                    returned, 
+                    loc: token.get_loc(&args.file.info)
+                })
             },
             Expression::Binary(BinaryExpr { left, operator, right }) => {
-                let left = TypedExpression::check_expr(&left, args)?;
-                let right = TypedExpression::check_expr(&right, args)?;
+                let checked_left = TypedExpression::check_expr(&left, args)?;
+                let checked_right = TypedExpression::check_expr(&right, args)?;
                 let op = BinaryOpType::from_token_type(operator.token_type).expect("Unknown binary operator type");
 
-                match args.operators.evaluate_binary(left.returned(), right.returned(), op)
+                match args.operators.evaluate_binary(checked_left.returned(), checked_right.returned(), op)
                 {
                     Some(returned) => {
                         Ok(TypedExpression::Binary { 
-                            left: Box::new(left), 
+                            left: Box::new(checked_left), 
                             op, 
-                            right: Box::new(right), 
-                            returned 
+                            right: Box::new(checked_right), 
+                            returned,
+                            loc: (left.get_pos() + right.get_pos()).get_loc(&args.file.info)
                         })
                     },
                     None => {
-                        let left_str = left.returned().pretty_print(&args.context.structs);
-                        let right_str = right.returned().pretty_print(&args.context.structs);
+                        let left_str = checked_left.returned().pretty_print(&args.context.structs);
+                        let right_str = checked_right.returned().pretty_print(&args.context.structs);
                         Err(TypeError::NoBinaryOp(op, left_str, right_str, operator.get_loc(&args.file.info)))
                     }
                 }
             },
             Expression::Unary(UnaryExpr { operator, expression }) => {
-                let expression = TypedExpression::check_expr(&expression, args)?;
+                let expr = TypedExpression::check_expr(&expression, args)?;
                 let op = UnaryOpType::from_token_type(operator.token_type).expect("Unknown unary operator type");
 
-                match args.operators.evaluate_unary(expression.returned(), op)
+                match args.operators.evaluate_unary(expr.returned(), op)
                 {
                     Some(returned) => {
                         Ok(TypedExpression::Unary { 
-                            operand: Box::new(expression), 
+                            operand: Box::new(expr), 
                             op, 
-                            returned 
+                            returned,
+                            loc: (operator.pos + expression.get_pos()).get_loc(&args.file.info)
                         })
                     },
                     None => {
-                        let expr_str = expression.returned().pretty_print(&args.context.structs);
+                        let expr_str = expr.returned().pretty_print(&args.context.structs);
                         Err(TypeError::NoUnaryOp(op, expr_str, operator.get_loc(&args.file.info)))
                     }
                 }
             },
-            Expression::Construction(ConstructionExpr { type_name, open_brace: _, args: con_args, close_brace: _ }) => {
+            Expression::Construction(ConstructionExpr { type_name, open_brace: _, args: con_args, close_brace }) => {
                 let type_info = TypeInfo::from(type_name, &args.context.type_resolver, args.file)?;
 
                 let TypeInfo::Primary(id) = type_info else {
@@ -175,25 +189,27 @@ impl TypedExpression
                 };
 
                 let def = args.context.structs.get(&id).unwrap();
-                let args = check_construction_args(def, con_args, args, type_name.get_pos())?;
+                let checked_args = check_construction_args(def, con_args, args, type_name.get_pos())?;
                 
                 Ok(TypedExpression::Construction { 
                     type_id: id.clone(), 
-                    args, 
-                    returned: TypeInfo::Primary(id) 
+                    args: checked_args, 
+                    returned: TypeInfo::Primary(id),
+                    loc: (type_name.get_pos() + close_brace.pos).get_loc(&args.file.info)
                 })
             },
             Expression::Identifier(id) => {
-                let id = args.resolve_name(id)?;
+                let res_id = args.resolve_name(id)?;
 
-                let returned = match &id {
+                let returned = match &res_id {
                     TypedIdentifier::Function(id) => args.context.funcs.get(id).unwrap().get_type_info(),
                     TypedIdentifier::Variable(id) => args.var_stack.get_var(id).type_info.clone(),
                 };
 
-                Ok(TypedExpression::Identifier { id, returned })
+                Ok(TypedExpression::Identifier { id: res_id, returned, loc: id.get_loc(&args.file.info) })
             },
             Expression::Call(CallExpr { expression, open_paren, args: call_args, close_paren }) => {
+                let loc = (expression.get_pos() + close_paren.pos).get_loc(&args.file.info);
                 let expr = TypedExpression::check_expr(&expression, args)?;
 
                 let throw_error = |infos: Vec<TypeInfo>| -> Result<TypedExpression, TypeError> {
@@ -202,7 +218,7 @@ impl TypedExpression
                     return Err(TypeError::InvalidCallArgs(arg_names, loc));
                 };
 
-                if let TypedExpression::Identifier { id: TypedIdentifier::Function(id), returned: _ } = &expr {
+                if let TypedExpression::Identifier { id: TypedIdentifier::Function(id), returned: _, loc: _ } = &expr {
                     let def = args.context.funcs.get(id).unwrap();
                     let param_count = def.parameters.len();
 
@@ -238,7 +254,8 @@ impl TypedExpression
                     return Ok(TypedExpression::Call { 
                         called: Box::new(expr), 
                         args: checked_args,
-                        returned: def.returned.clone()
+                        returned: def.returned.clone(),
+                        loc
                     });
                 }
 
@@ -267,7 +284,8 @@ impl TypedExpression
                     called: Box::new(expr), 
                     args: 
                     call_args, 
-                    returned
+                    returned,
+                    loc
                 })
             }
             _ => panic!("This expression has not been implemented yet")
@@ -278,15 +296,31 @@ impl TypedExpression
     {
         match self 
         {
-            TypedExpression::Literal { returned } => returned,
-            TypedExpression::Binary { left: _, op: _, right: _, returned } => returned,
-            TypedExpression::Unary { operand: _, op: _, returned } => returned,
-            TypedExpression::Call { called: _, args: _, returned } => returned,
-            TypedExpression::Index { indexed: _, arg: _, returned } => returned,
-            TypedExpression::Access { accessed: _, name: _, returned } => returned,
-            TypedExpression::Cast { casted: _, type_info: _, returned } => returned,
-            TypedExpression::Construction { type_id: _, args: _, returned } => returned,
-            TypedExpression::Identifier { id: _, returned } => returned,
+            TypedExpression::Literal { returned, loc: _ } => returned,
+            TypedExpression::Binary { left: _, op: _, right: _, returned, loc: _ } => returned,
+            TypedExpression::Unary { operand: _, op: _, returned, loc: _ } => returned,
+            TypedExpression::Call { called: _, args: _, returned, loc: _ } => returned,
+            TypedExpression::Index { indexed: _, arg: _, returned, loc: _ } => returned,
+            TypedExpression::Access { accessed: _, name: _, returned, loc: _ } => returned,
+            TypedExpression::Cast { casted: _, type_info: _, returned, loc: _ } => returned,
+            TypedExpression::Construction { type_id: _, args: _, returned, loc: _ } => returned,
+            TypedExpression::Identifier { id: _, returned, loc: _ } => returned,
+        }
+    }
+
+    pub fn loc(&self) -> &TextLoc
+    {
+        match self 
+        {
+            TypedExpression::Literal { returned: _, loc } => loc,
+            TypedExpression::Binary { left: _, op: _, right: _, returned: _, loc } => loc,
+            TypedExpression::Unary { operand: _, op: _, returned: _, loc } => loc,
+            TypedExpression::Call { called: _, args: _, returned: _, loc } => loc,
+            TypedExpression::Index { indexed: _, arg: _, returned: _, loc } => loc,
+            TypedExpression::Access { accessed: _, name: _, returned: _, loc } => loc,
+            TypedExpression::Cast { casted: _, type_info: _, returned: _, loc } => loc,
+            TypedExpression::Construction { type_id: _, args: _, returned: _, loc } => loc,
+            TypedExpression::Identifier { id: _, returned: _, loc } => loc,
         }
     }
 }

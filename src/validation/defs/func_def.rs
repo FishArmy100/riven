@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use uuid::Uuid;
 
-use crate::{parsing::ast::FileNode, validation::{ast::{stmt::{StmtCheckArgs, TypedStatement}, ExprCheckArgs, TypedExpression}, defs::var_def::VariableStack, info::{func_info::FuncInfo, types::TypeInfo, InfoContext}, operators::GlobalOperators, type_error::TypeError}};
+use crate::{parsing::ast::FileNode, validation::{ast::{stmt::{StmtCheckArgs, TypedStatement}, ExprCheckArgs, TypedExpression}, builtins::VOID_TYPE, defs::var_def::VariableStack, info::{func_info::FuncInfo, types::TypeInfo, InfoContext}, operators::GlobalOperators, type_error::TypeError}};
 
 use super::var_def::VarDef;
 
@@ -12,6 +12,7 @@ pub struct FuncDef
     pub id: Uuid,
     pub name: String,
     pub is_pub: bool,
+    pub returned: TypeInfo,
     pub params: Vec<FuncDefParam>,
     pub body: FuncDefBody
 }
@@ -85,6 +86,18 @@ impl FuncDef
 
         let body = match TypedStatement::check_block(&info.decl.body, &mut stmt_check_args){
             Ok(ok) => {
+                let returns = ok.check_return(&info.returned, &stmt_check_args);
+                match returns
+                {
+                    Ok(returns) => {
+                        if !returns && info.returned != *VOID_TYPE
+                        {
+                            errors.push(TypeError::FunctionMustReturn(info.decl.fn_tok.get_loc(&info.file.info)));
+                        }
+                    },
+                    Err(err) => errors.extend(err),
+                }
+
                 let body = FuncDefBody {
                     vars: body_var_stack.get_vars(),
                     block: Box::new(ok),
@@ -108,7 +121,8 @@ impl FuncDef
             name: info.name.clone(), 
             is_pub: info.is_pub, 
             params, 
-            body: body.unwrap() 
+            body: body.unwrap() ,
+            returned: info.returned.clone()
         })
     }
 }
