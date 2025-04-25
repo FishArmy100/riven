@@ -196,6 +196,7 @@ pub enum Declaration
 pub struct FileNode
 {
     pub usings: Vec<UseStmt>,
+    pub using_paths: Vec<Vec<String>>,
     pub declarations: Vec<Declaration>,
     pub eof: Token,
     pub info: Arc<FileInfo>,

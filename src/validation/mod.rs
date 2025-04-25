@@ -6,6 +6,8 @@ pub mod functions;
 pub mod types;
 pub mod var;
 pub mod type_error;
+pub mod info;
+pub mod defs;
 
 use std::{collections::HashSet, sync::Arc};
 

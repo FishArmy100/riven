@@ -2,7 +2,14 @@ use std::collections::HashMap;
 
 use uuid::Uuid;
 
-use crate::{lexing::token::{Token, TokenValue}, parsing::ast::{BinaryExpr, CallExpr, ConstructionArg, ConstructionExpr, Expression, UnaryExpr}, utils::{FileInfo, TextPos}, validation::{builtins::{BOOL_TYPE, FLOAT_TYPE, INT_TYPE, STRING_TYPE}, functions::{FuncLibrary, FuncResolverResult}, operators::{BinaryOpType, GlobalOperators, UnaryOpType}, type_info::TypeInfo, var::VariableStack, StructDef, TypeError, TypeLibrary}};
+use crate::{
+    lexing::token::{Token, TokenValue}, 
+    parsing::ast::{BinaryExpr, CallExpr, ConstructionArg, ConstructionExpr, Expression, FileNode, UnaryExpr}, 
+    utils::{FileInfo, TextPos}, 
+    validation::{
+        builtins::{BOOL_TYPE, FLOAT_TYPE, INT_TYPE, STRING_TYPE}, functions::{FuncLibrary, FuncResolverResult}, info::types::TypeInfo, operators::{BinaryOpType, GlobalOperators, UnaryOpType}, var::VariableStack, TypeError, TypeLibrary
+    }
+};
 
 #[derive(Debug)]
 pub enum TypedIdentifier
@@ -75,8 +82,7 @@ pub struct ExprCheckArgs<'a>
     pub type_library: &'a TypeLibrary,
     pub func_library: &'a FuncLibrary,
     pub var_stack: &'a VariableStack,
-    pub file: &'a FileInfo,
-    pub usings: &'a [Vec<String>],
+    pub file: &'a FileNode,
 }
 
 impl<'a> ExprCheckArgs<'a>
@@ -88,7 +94,7 @@ impl<'a> ExprCheckArgs<'a>
             return Ok(TypedIdentifier::Variable(var));
         }
         
-        match self.func_library.resolver().resolve(token, self.usings)
+        match self.func_library.resolver().resolve(token, self.file)
         {
             FuncResolverResult::ConflictingFunctions(token) => {
                 return Err(TypeError::ConflictingFunctions(token.clone(), token.get_loc(self.file)));

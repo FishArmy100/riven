@@ -190,52 +190,6 @@ impl TypeLibraryBuilder
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct StructDef
-{
-    pub id: Uuid,
-    pub name: String,
-    pub members: HashMap<String, StructMember>,
-    pub is_pub: bool,
-}
-
-impl StructDef
-{
-    pub fn new(id: Uuid, decl: &StructDecl, type_resolver: TypeResolver, usings: &[Vec<String>], file: &FileInfo) -> Result<Self, TypeError>
-    {
-        let name = decl.id.value_string().unwrap().clone();
-        let members = decl.members.iter().map(|m| {
-            let name = m.id.value_string().unwrap().clone();
-            let type_info = TypeInfo::from(&m.type_name, type_resolver, usings, file)?;
-            let initializer = m.initializer.as_ref()
-                .map(|(_, init)| Arc::new(init.clone()))
-                .map_or(Initializer::None, |init| Initializer::AST(init));
-
-            Ok(StructMember {
-                name,
-                type_info,
-                initializer,
-            })
-        }).collect::<Result<Vec<_>, _>>()?;
-
-        Ok(StructDef { 
-            id, 
-            name, 
-            members: members.into_iter()
-                .map(|m| (m.name.clone(), m))
-                .collect(),
-            is_pub: decl.pub_tok.is_some(),
-        })
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct StructMember
-{
-    pub name: String,
-    pub type_info: TypeInfo,
-    pub initializer: Initializer, // delayed initialization
-}
 
 #[derive(Debug, Clone)]
 pub enum TypeResolverResult
