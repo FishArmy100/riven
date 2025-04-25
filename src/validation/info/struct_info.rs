@@ -2,9 +2,23 @@ use std::{collections::HashMap, sync::Arc};
 
 use uuid::Uuid;
 
-use crate::{parsing::ast::{Declaration, Expression, FileNode, StructDecl}, validation::type_error::TypeError};
+use crate::{parsing::ast::{Declaration, Expression, FileNode, StructDecl, StructDeclMember}, validation::type_error::TypeError};
 
 use super::{types::TypeInfo, TypeResolver};
+
+#[derive(Debug, Clone)]
+pub enum StructDeclData
+{
+    Decl 
+    {
+        decl: Arc<StructDecl>,
+        file: Arc<FileNode>,
+    },
+    Builtin 
+    {
+        members: Vec<StructDeclMember>
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct StructInfo
@@ -13,8 +27,7 @@ pub struct StructInfo
     pub name: String,
     pub members: HashMap<String, StructMember>,
     pub is_pub: bool,
-    pub decl: Arc<StructDecl>,
-    pub file: Arc<FileNode>,
+    pub decl_data: StructDeclData,
 }
 
 impl StructInfo

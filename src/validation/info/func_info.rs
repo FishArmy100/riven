@@ -2,10 +2,23 @@ use std::sync::Arc;
 
 use uuid::Uuid;
 
-use crate::{parsing::ast::{Declaration, Expression, FileNode, FnDecl}, validation::{builtins::VOID_TYPE, type_error::TypeError}};
+use crate::{parsing::ast::{Declaration, Expression, FileNode, FnDecl}, validation::{builtins::VOID_TYPE, defs::func_def::FuncDefParam, type_error::TypeError}};
 
 use super::{types::TypeInfo, FuncResolver, TypeResolver};
 
+#[derive(Debug, Clone)]
+pub enum FuncDeclData
+{
+    Decl 
+    {
+        decl: Arc<FnDecl>,
+        file: Arc<FileNode>
+    },
+    Builtin 
+    {
+        params: Vec<Arc<FuncDefParam>>
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct FuncInfoParam
@@ -23,8 +36,7 @@ pub struct FuncInfo
     pub parameters: Vec<FuncInfoParam>,
     pub returned: TypeInfo,
     pub is_pub: bool,
-    pub decl: Arc<FnDecl>,
-    pub file: Arc<FileNode>
+    pub decl_data: FuncDeclData,
 }
 
 impl FuncInfo
