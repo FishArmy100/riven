@@ -1,17 +1,14 @@
 use either::Either::{Left, Right};
 use uuid::Uuid;
-use crate::{parsing::ast::{BlockStmt, ElseBranch, IfStmt, Statement}, utils::FileInfo, validation::{builtins::BOOL_TYPE, functions::FuncLibrary, operators::GlobalOperators, var::{VarDef, VariableStack}, TypeError, TypeLibrary}};
+use crate::{parsing::ast::{BlockStmt, ElseBranch, FileNode, IfStmt, Statement}, utils::{FileInfo, TextLoc}, validation::{builtins::{BOOL_TYPE, VOID_TYPE}, defs::var_def::{VarDef, VariableStack}, info::{types::TypeInfo, InfoContext}, operators::GlobalOperators, TypeError}};
 
 use super::{ExprCheckArgs, TypedExpression};
 
 pub struct StmtCheckArgs<'a>
 {
     pub operators: &'a GlobalOperators,
-    pub type_library: &'a TypeLibrary,
-    pub func_library: &'a FuncLibrary,
-    pub file: &'a FileInfo,
-    pub usings: &'a [Vec<String>],
-
+    pub context: &'a InfoContext,
+    pub file: &'a FileNode,
     pub var_stack: &'a mut VariableStack,
 }
 
@@ -21,11 +18,9 @@ impl<'a> StmtCheckArgs<'a>
     {
         ExprCheckArgs { 
             operators: self.operators, 
-            type_library: self.type_library, 
-            func_library: self.func_library, 
+            context: self.context,
             var_stack: &self.var_stack, 
             file: self.file, 
-            usings: self.usings,
         }
     }
 }
@@ -49,7 +44,11 @@ pub enum TypedStatement
     },
     Break,
     Continue,
-    Return(Option<Box<TypedExpression>>),
+    Return
+    {
+        returned: Option<Box<TypedExpression>>,
+        loc: TextLoc,
+    },
     For 
     {
         var_id: Uuid,
@@ -101,8 +100,8 @@ impl TypedStatement
                 
                 if !condition.as_ref().is_some_and(|e| *e.returned() != *BOOL_TYPE)
                 {
-                    let name = BOOL_TYPE.pretty_print(eval_args.type_library);
-                    let loc = while_stmt.while_tok.get_loc(eval_args.file);
+                    let name = BOOL_TYPE.pretty_print(&eval_args.context.structs);
+                    let loc = while_stmt.while_tok.get_loc(&eval_args.file.info);
                     errors.push(TypeError::ExpectedType(name, loc));
                 }
 
@@ -136,8 +135,8 @@ impl TypedStatement
 
                 if !condition.as_ref().is_some_and(|e| !e.returned().is_iter())
                 {
-                    let name = BOOL_TYPE.pretty_print(eval_args.type_library);
-                    let loc = for_stmt.for_tok.get_loc(eval_args.file);
+                    let name = BOOL_TYPE.pretty_print(&eval_args.context.structs);
+                    let loc = for_stmt.for_tok.get_loc(&eval_args.file.info);
                     errors.push(TypeError::ExpectedType(name, loc));
                 }
 
@@ -167,12 +166,18 @@ impl TypedStatement
                 let args = eval_args.expr_check_args();
 
                 let Some(expr) = &return_stmt.expression else {
-                    return Ok(TypedStatement::Return(None))
+                    return Ok(TypedStatement::Return{
+                        returned: None,
+                        loc: (return_stmt.return_tok.pos + return_stmt.semi_colon.pos).get_loc(&args.file.info)
+                    })
                 };
 
                 match TypedExpression::check_expr(expr, args)
                 {
-                    Ok(ok) => Ok(TypedStatement::Expr(Box::new(ok))),
+                    Ok(ok) => Ok(TypedStatement::Return {
+                        returned: Some(Box::new(ok)),
+                        loc: (return_stmt.return_tok.pos + return_stmt.semi_colon.pos).get_loc(&args.file.info)
+                    }),
                     Err(err) => Err(vec![err]),
                 }
             },
@@ -185,7 +190,7 @@ impl TypedStatement
             Statement::Assign(assign_stmt) => {
                 let var_name = assign_stmt.value.value_string().unwrap().clone();
                 let Some(id) = eval_args.var_stack.resolve_var(&var_name) else {
-                    return Err(vec![TypeError::UnknownVariable(var_name, assign_stmt.value.get_loc(eval_args.file))]);
+                    return Err(vec![TypeError::UnknownVariable(var_name, assign_stmt.value.get_loc(&eval_args.file.info))]);
                 };
 
                 let var_type = &eval_args.var_stack.get_var(&id).type_info;
@@ -196,8 +201,8 @@ impl TypedStatement
 
                 if expression.returned() != var_type
                 {
-                    let type_name = var_type.pretty_print(eval_args.type_library);
-                    let loc = assign_stmt.expression.get_pos().get_loc(eval_args.file);
+                    let type_name = var_type.pretty_print(&eval_args.context.structs);
+                    let loc = assign_stmt.expression.get_pos().get_loc(&eval_args.file.info);
                     return Err(vec![TypeError::ExpectedType(type_name, loc)])
                 }
 
@@ -226,8 +231,8 @@ impl TypedStatement
         
         if !condition.as_ref().is_some_and(|e| *e.returned() != *BOOL_TYPE)
         {
-            let name = BOOL_TYPE.pretty_print(eval_args.type_library);
-            let loc = stmt.if_tok.get_loc(eval_args.file);
+            let name = BOOL_TYPE.pretty_print(&eval_args.context.structs);
+            let loc = stmt.if_tok.get_loc(&eval_args.file.info);
             errors.push(TypeError::ExpectedType(name, loc));
         }
 
@@ -293,6 +298,53 @@ impl TypedStatement
         else 
         {
             Ok(Self::Block(statements))    
+        }
+    }
+
+    pub fn check_return(&self, info: &TypeInfo, args: &StmtCheckArgs) -> Result<bool, Vec<TypeError>>
+    {
+        match self 
+        {
+            TypedStatement::Block(typed_statements) => {
+                let mut errors = vec![];
+                let mut returns = false;
+                for stmt in typed_statements
+                {
+                    match stmt.check_return(info, args) 
+                    {
+                        Ok(ok) => returns = returns || ok,
+                        Err(e) => errors.extend(e),
+                    }
+                }
+
+                if errors.len() > 0
+                {
+                    return Err(errors)
+                }
+
+                Ok(returns)
+            },
+            TypedStatement::If { expression: _, body, else_block } => {
+                let body_returns = body.check_return(info, args)?;
+
+                let Some(else_block) = else_block else {
+                    return Ok(false)
+                };
+
+                let else_returns = else_block.check_return(info, args)?;
+                Ok(body_returns && else_returns)
+            },
+            TypedStatement::Return{ returned, loc } => {
+                let returned = returned.as_ref().map_or(&*VOID_TYPE, |e| e.returned());
+                if returned != info
+                {
+                    let name = info.pretty_print(&args.context.structs);
+                    return Err(vec![TypeError::ExpectedType(name, loc.clone())]);
+                }
+
+                Ok(true)
+            },
+            _ => Ok(false)
         }
     }
 }

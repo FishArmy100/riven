@@ -86,7 +86,7 @@ pub struct FnParam
     pub id: Token,
     pub colon: Token,
     pub type_name: TypeName,
-    pub default_value: Option<(Token, Expression)>
+    pub default_value: Option<(Token, Arc<Expression>)>
 }
 
 #[derive(Debug, Clone)]
@@ -110,7 +110,7 @@ pub struct StructDeclMember
     pub id: Token,
     pub colon: Token,
     pub type_name: TypeName,
-    pub initializer: Option<(Token, Expression)>,
+    pub initializer: Option<(Token, Arc<Expression>)>,
 }
 
 #[derive(Debug, Clone)]
@@ -196,6 +196,7 @@ pub enum Declaration
 pub struct FileNode
 {
     pub usings: Vec<UseStmt>,
+    pub using_paths: Vec<Vec<String>>,
     pub declarations: Vec<Declaration>,
     pub eof: Token,
     pub info: Arc<FileInfo>,

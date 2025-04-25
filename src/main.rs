@@ -1,11 +1,8 @@
 use std::sync::Arc;
-
 use compiler::CompilerError;
-use itertools::Itertools;
-use parsing::ast::Program;
-use utils::FileInfo;
-use validation::{ast::{stmt::TypedStatement, ExprCheckArgs, TypedExpression}, builtins, functions::FuncLibraryBuilder, var::VariableStack, TypeLibraryBuilder, TypeResolver, ValidationContext};
-use validation::StructDef;
+use parsing::ast::{FileNode, Program};
+use utils::{write_file, FileInfo};
+use validation::CheckedProgram;
 
 pub mod lexing;
 pub mod utils;
@@ -15,73 +12,31 @@ pub mod validation;
 
 fn main() 
 {
-
-    let file = FileInfo::from_text("
-
-        struct Test { name: String, age: Int = 5 }
-        
-        // fn test()
-        fn test(t: Test = Test { name: \"Nate\" }) -> Int
-        {
-
-        }
-
-        fn build(a: Int, b: Float = 4.5, c: Int = 5) -> Int
-        {
-            return 7;
-        }
-        ", "src".into());
-    let file = compiler::run_parser(Arc::new(file)).unwrap();
-    let file = Arc::new(file);
+    let file_1 = parse_file("tests/test.rvn", "src/test");
+    let file_2 = parse_file("tests/test2.rvn", "src");
 
     let program = Program {
-        files: vec![file]
-    };
-    
-    let context = match ValidationContext::new(&program) {
-        Ok(ok) => ok,
-        Err(err) => {
-            for e in err 
-            {
-                println!("{}", e.format_error())
-            }
-
-            return;
-        }
+        files: vec![file_1, file_2]
     };
 
     println!("Context compiled");
 
-    let src = "
+    let checked = CheckedProgram::new(&program);
+    match checked
     {
-        let x = 5;
-        let y = x * 2;
-        let t = Test {
-            name: \"Nate Craver\",
-            age: y
-        };
-    }
-    ";
-    let file = &FileInfo::from_text(src, "src".into());
-    let block = compiler::run_block_parser(file).unwrap();
-
-    let usings = vec![vec!["src".into()]];
-    let mut var_stack = VariableStack::new();
-    let mut args = context.check_stmt_args(&usings, &file, &mut var_stack);
-
-    let expression = TypedStatement::check_block(&block, &mut args);
-
-    match expression
-    {
-        Ok(ok) => {
-            println!("Variables: \n{:#?}", var_stack);
-            println!("{:#?}", ok)
-        },
-        Err(errors) => {
-            for e in errors
+        Ok(ok) => write_file("out/checked.txt", &format!("{:#?}", ok)).unwrap(),
+        Err(errs) => {
+            for e in errs
             {
                 println!("{}", e.format_error())
             }
         },
     }
+}
+
+fn parse_file(path: &str, namespace: &str) -> Arc<FileNode>
+{
+    let file = FileInfo::read(path, namespace).unwrap();
+    let file = compiler::run_parser(Arc::new(file)).unwrap();
+    Arc::new(file)
 }

@@ -2,9 +2,7 @@ use std::collections::HashMap;
 
 use uuid::Uuid;
 
-use crate::parsing::ast::LetStmt;
-
-use super::{ast::{ExprCheckArgs, TypedExpression}, type_info::TypeInfo, TypeError};
+use crate::{parsing::ast::LetStmt, validation::{ast::{ExprCheckArgs, TypedExpression}, info::types::TypeInfo, type_error::TypeError}};
 
 #[derive(Debug)]
 pub struct VarDef
@@ -24,11 +22,11 @@ impl VarDef
         let id = Uuid::new_v4();
         let type_info = if let Some((_, t)) = &let_stmt.type_name 
         {
-            let type_info = TypeInfo::from(t, args.type_library.resolver(), args.usings, args.file)?;
+            let type_info = TypeInfo::from(t, &args.context.type_resolver, args.file)?;
             if type_info != *initializer.returned()
             {
-                let name = type_info.pretty_print(args.type_library);
-                let loc = let_stmt.expression.get_pos().get_loc(args.file);
+                let name = type_info.pretty_print(&args.context.structs);
+                let loc = let_stmt.expression.get_pos().get_loc(&args.file.info);
                 return Err(TypeError::ExpectedType(name, loc));
             }
 
@@ -70,6 +68,11 @@ impl VariableStack
             variables: HashMap::new(),
             stack: vec![],
         }
+    }
+
+    pub fn get_vars(self) -> HashMap<Uuid, VarDef>
+    {
+        self.variables
     }
 
     pub fn resolve_var(&self, name: &str) -> Option<Uuid>

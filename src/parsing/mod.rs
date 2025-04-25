@@ -6,6 +6,7 @@ pub mod ast;
 
 use std::sync::Arc;
 
+use itertools::Itertools;
 pub use type_parsing::*;
 pub use expr_parsing::*;
 pub use stmt_parsing::*;
@@ -111,8 +112,19 @@ pub fn parse_file(tokens: &Vec<Token>, file: Arc<FileInfo>) -> Result<Option<Fil
         return Err(errors)
     }
 
+    let mut using_paths = usings.iter()
+        .map(|u| u.ids.iter()
+            .map(|id| id.value_string().unwrap().clone())
+            .collect_vec())
+        .collect_vec();
+
+    // a bit borked, but should work
+    using_paths.push(vec![]);
+    using_paths.push(file.path.split_relative());
+
     Ok(Some(FileNode {
         usings, 
+        using_paths,
         declarations, 
         eof,
         info: file,

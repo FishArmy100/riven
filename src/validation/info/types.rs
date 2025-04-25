@@ -1,9 +1,11 @@
+use std::collections::HashMap;
+
 use itertools::Itertools;
 use uuid::Uuid;
 
-use crate::{parsing::ast::TypeName, utils::FileInfo};
+use crate::{parsing::ast::{FileNode, TypeName}, validation::{builtins::VOID_TYPE, type_error::TypeError}};
 
-use super::{builtins::VOID_TYPE, TypeError, TypeLibrary, TypeResolver};
+use super::{struct_info::StructInfo, TypeResolver};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TypeInfo
@@ -20,43 +22,43 @@ pub enum TypeInfo
 
 impl TypeInfo
 {
-    pub fn from(type_name: &TypeName, resolver: TypeResolver, usings: &[Vec<String>], file: &FileInfo) -> Result<Self, TypeError>
+    pub fn from(type_name: &TypeName, resolver: &TypeResolver, file: &FileNode) -> Result<Self, TypeError>
     {
         match type_name
         {
             TypeName::Identifier(token) => {
-                let id = resolver.resolve(token, usings).to_result(file)?;
+                let id = resolver.resolve_result(token, file)?;
                 Ok(Self::Primary(id.clone()))
             },
             TypeName::Array { open_bracket: _, close_bracket: _, type_name } => {
-                let inner = Self::from(type_name, resolver, usings, file)?;
+                let inner = Self::from(type_name, resolver, file)?;
                 Ok(Self::Array(Box::new(inner)))
             },
             TypeName::Function { fn_type_tok: _, open_paren: _, parameter_types, close_paren: _, return_type } => {
-                let args = parameter_types.iter().map(|p| TypeInfo::from(p, resolver, usings, file)).collect::<Result<_, _>>()?;
-                let returned = return_type.as_ref().map(|r| TypeInfo::from(&r.1, resolver, usings, file));
+                let args = parameter_types.iter().map(|p| TypeInfo::from(p, resolver, file)).collect::<Result<_, _>>()?;
+                let returned = return_type.as_ref().map(|r| TypeInfo::from(&r.1, resolver, file));
 
                 if let Some(Err(err)) = returned { return Err(err) }
 
                 Ok(Self::Function { args, returned: returned.map(|r| Box::new(r.unwrap())).unwrap_or(Box::new(VOID_TYPE.clone())) })
             },
             TypeName::Optional { question_mark: _, type_name } => {
-                let inner = Self::from(type_name, resolver, usings, file)?;
+                let inner = Self::from(type_name, resolver, file)?;
                 Ok(Self::Optional(Box::new(inner)))
             },
         }
     }
 
-    pub fn pretty_print(&self, library: &TypeLibrary) -> String 
+    pub fn pretty_print(&self, structs: &HashMap<Uuid, StructInfo>) -> String 
     {
         match self 
         {
-            TypeInfo::Primary(uuid) => library.get_type(uuid).name.clone(),
-            TypeInfo::Optional(type_info) => format!("?{}", type_info.pretty_print(library)),
-            TypeInfo::Array(type_info) => format!("[]{}", type_info.pretty_print(library)),
+            TypeInfo::Primary(uuid) => structs.get(uuid).unwrap().name.clone(),
+            TypeInfo::Optional(type_info) => format!("?{}", type_info.pretty_print(structs)),
+            TypeInfo::Array(type_info) => format!("[]{}", type_info.pretty_print(structs)),
             TypeInfo::Function { args, returned } => {
-                let args = args.iter().map(|a| a.pretty_print(library)).join(", ");
-                let returned = returned.pretty_print(library);
+                let args = args.iter().map(|a| a.pretty_print(structs)).join(", ");
+                let returned = returned.pretty_print(structs);
                 format!("Fn({}) -> {}", args, returned)
             },
         }

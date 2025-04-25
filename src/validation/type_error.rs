@@ -24,6 +24,7 @@ pub enum TypeError
     InvalidCallArgs(Vec<String>, TextLoc),
     ExpectedAnIterator(TextLoc),
     UnknownVariable(String, TextLoc),
+    FunctionMustReturn(TextLoc),
 }
 
 impl CompilerError for TypeError
@@ -49,6 +50,7 @@ impl CompilerError for TypeError
             TypeError::InvalidCallArgs(items, _) => format!("Expected call args: {}", items.iter().join(", ")),
             TypeError::ExpectedAnIterator(_) => format!("Expected an iterator"),
             TypeError::UnknownVariable(name, _) => format!("Unknown variable {}", name),
+            TypeError::FunctionMustReturn(_) => format!("Function must return"),
         }
     }
 
@@ -73,6 +75,7 @@ impl CompilerError for TypeError
             TypeError::InvalidCallArgs(_, loc) => loc.clone(),
             TypeError::ExpectedAnIterator(loc) => loc.clone(),
             TypeError::UnknownVariable(_, loc) => loc.clone(),
+            TypeError::FunctionMustReturn(loc) => loc.clone(),
         }
     }
 }

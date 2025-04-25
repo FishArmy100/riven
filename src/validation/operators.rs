@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use crate::lexing::token::TokenType;
 
-use super::type_info::TypeInfo;
+use super::info::types::TypeInfo;
 
 pub struct GlobalOperators
 {

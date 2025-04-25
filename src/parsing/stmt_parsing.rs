@@ -313,14 +313,14 @@ fn parse_struct_member(reader: &mut TokenReader) -> ParserResult<Option<StructDe
 
     let initializer = if let Some(equal) = reader.check(TokenType::Equal) {
         let expression = expect_expression(reader, parse_expression)?;
-        Some((equal, expression))
+        Some((equal, Arc::new(expression)))
     } else { None };
 
     Ok(Some(StructDeclMember {
         id,
         colon, 
         type_name, 
-        initializer 
+        initializer
     }))
 }
 
@@ -398,7 +398,7 @@ fn parse_fn_param(reader: &mut TokenReader) -> ParserResult<Option<FnParam>>
 
         let default_value = if let Some(equal) = reader.check(TokenType::Equal) {
             let expression = expect_expression(reader, parse_expression)?;
-            Some((equal, expression))
+            Some((equal, Arc::new(expression)))
         } else { None };
 
         Ok(Some(FnParam {
