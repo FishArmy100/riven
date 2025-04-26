@@ -1,6 +1,6 @@
 
-
-fn test() 
+fn main()
 {
-    let a = [];
+    let array = [5, 6, 7];
+    array[1] = 0;
 }

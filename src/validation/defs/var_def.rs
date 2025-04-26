@@ -1,21 +1,21 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use uuid::Uuid;
 
 use crate::{parsing::ast::LetStmt, validation::{ast::{ExprCheckArgs, TypedExpression}, info::types::TypeInfo, type_error::TypeError}};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct VarDef
 {
     pub id: Uuid,
     pub name: String,
     pub type_info: TypeInfo,
-    pub initializer: Option<TypedExpression>,
+    pub initializer: Option<Arc<TypedExpression>>,
 }
 
 impl VarDef
 {
-    pub fn from_let(let_stmt: &LetStmt, args: ExprCheckArgs) -> Result<Self, TypeError>
+    pub fn from_let(let_stmt: &LetStmt, args: &ExprCheckArgs) -> Result<Self, TypeError>
     {
         let name = let_stmt.id.value_string().unwrap().clone();
         let id = Uuid::new_v4();
@@ -35,14 +35,14 @@ impl VarDef
             id,
             name,
             type_info: type_info.unwrap(),
-            initializer: Some(initializer),
+            initializer: Some(Arc::new(initializer)),
         })
     }
 
-    pub fn new(name: String, type_info: TypeInfo) -> Self 
+    pub fn new(name: String, type_info: TypeInfo, id: Uuid) -> Self 
     {
         Self {
-            id: Uuid::new_v4(),
+            id,
             name,
             type_info,
             initializer: None,
@@ -68,9 +68,9 @@ impl VariableStack
         }
     }
 
-    pub fn get_vars(self) -> HashMap<Uuid, VarDef>
+    pub fn get_vars(&self) -> HashMap<Uuid, VarDef>
     {
-        self.variables
+        self.variables.clone()
     }
 
     pub fn resolve_var(&self, name: &str) -> Option<Uuid>
@@ -102,11 +102,9 @@ impl VariableStack
         self.variables.insert(def.id.clone(), def);
     }
 
-    pub fn add_var(&mut self, name: String, type_info: TypeInfo) -> Uuid
+    pub fn add_var(&mut self, name: String, type_info: TypeInfo, id: Uuid)
     {
-        let def = VarDef::new(name, type_info);
-        let id = def.id.clone();
+        let def = VarDef::new(name, type_info, id);
         self.add_var_def(def);
-        id
     }
 }

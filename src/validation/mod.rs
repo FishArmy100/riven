@@ -1,12 +1,12 @@
-use std::{collections::HashSet, sync::Arc};
+use std::sync::Arc;
 
+use builtins::STRING_TYPE;
 use defs::{func_def::FuncDef, struct_def::StructDef};
-use info::InfoContext;
-use itertools::Itertools;
-use operators::GlobalOperators;
+use info::{types::TypeInfo, InfoContext};
 use type_error::TypeError;
+use uuid::Uuid;
 
-use crate::{parsing::ast::{FileNode, Program}, utils::TextPos};
+use crate::parsing::ast::Program;
 
 pub mod ast;
 pub mod builtins;
@@ -20,6 +20,7 @@ pub struct CheckedProgram
 {
     pub structs: Vec<Arc<StructDef>>,
     pub funcs: Vec<Arc<FuncDef>>,
+    pub main: Uuid,
 }
 
 impl CheckedProgram
@@ -51,6 +52,32 @@ impl CheckedProgram
             }
         }
 
+        let mut main_fn = None;
+        for f in &funcs
+        {
+            if f.name == "main"
+            {
+                if f.params.len() != 0 && f.
+                   params[0].type_info != TypeInfo::Array(Box::new(STRING_TYPE.clone()))
+                {
+                    errors.push(TypeError::InvalidMainArgs(f.name_loc.as_ref().unwrap().clone()));
+                }
+                if main_fn.is_none()
+                {
+                    main_fn = Some(f.id.clone())
+                }
+                else 
+                {
+                    errors.push(TypeError::DuplicateMainFn(f.name_loc.as_ref().unwrap().clone()));    
+                }
+            }
+        }
+
+        if main_fn.is_none()
+        {
+            errors.push(TypeError::NoMainFn);
+        }
+
         if errors.len() > 0
         {
             return Err(errors);
@@ -58,51 +85,8 @@ impl CheckedProgram
 
         Ok(CheckedProgram { 
             structs, 
-            funcs 
+            funcs,
+            main: main_fn.unwrap()
         })
     }
-}
-
-
-fn check_usings(file: &FileNode, all_paths: &HashSet<Vec<String>>) -> (Vec<Vec<String>>, Vec<TypeError>)
-{
-    let mut usings = file.usings.iter()
-        .map(|u| {
-            let path = u.ids.iter()
-                .map(|id| id.value_string().unwrap().clone())
-                .collect_vec();
-
-            let mut pos = u.ids[0].pos;
-            for i in 1..u.ids.len()
-            {
-                pos = pos + u.ids[i].pos;
-            }
-
-            (path, pos)
-        })
-        .collect_vec();
-
-    usings.push((file.info.path.split_relative(), TextPos::uniform(0)));
-    usings.push((vec![], TextPos::uniform(0)));
-
-    let errors = usings.iter().filter_map(|(path, pos)| {
-        if !all_paths.contains(path)
-        {
-            Some(TypeError::UnknownUsing(path.clone(), pos.get_loc(&file.info)))
-        }
-        else 
-        {
-            None
-        }
-    }).collect_vec();
-    
-    let usings = usings.into_iter().map(|u| u.0).dedup().collect_vec();
-    (usings, errors)
-}
-
-fn get_all_file_paths(program: &Program) -> HashSet<Vec<String>>
-{
-    let mut paths = program.files.iter().map(|f| f.info.path.split_relative()).collect::<HashSet<_>>();
-    paths.insert(vec![]);
-    paths
 }

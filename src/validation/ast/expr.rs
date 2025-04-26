@@ -1,15 +1,18 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::{Arc, Mutex}};
 
+use either::Either::{Left, Right};
 use uuid::Uuid;
 
 use crate::{
     lexing::token::{Token, TokenType, TokenValue}, 
-    parsing::ast::{ArrayLiteral, BinaryExpr, CallExpr, CastExpr, ConstructionArg, ConstructionExpr, Expression, FileNode, UnaryExpr}, 
-    utils::{FileInfo, TextLoc, TextPos}, 
+    parsing::ast::{ArrayLiteral, BinaryExpr, CallExpr, CastExpr, ConstructionArg, ConstructionExpr, Expression, FileNode, IndexExpr, LambdaExpr, LambdaParams, UnaryExpr}, 
+    utils::{FileInfo, Shared, TextLoc, TextPos}, 
     validation::{
-        builtins::{BOOL_TYPE, FLOAT_TYPE, INT_TYPE, STRING_TYPE}, defs::var_def::VariableStack, info::{struct_info::StructInfo, types::TypeInfo, FuncResolverResult, InfoContext}, operators::{BinaryOpType, GlobalOperators, UnaryOpType}, TypeError
+        builtins::{BOOL_TYPE, FLOAT_TYPE, INT_TYPE, STRING_TYPE, VOID_TYPE}, defs::var_def::VariableStack, info::{struct_info::StructInfo, types::TypeInfo, FuncResolverResult, InfoContext}, operators::{BinaryOpType, GlobalOperators, UnaryOpType}, TypeError
     }
 };
+
+use super::stmt::{StmtCheckArgs, TypedStatement};
 
 #[derive(Debug)]
 pub enum TypedIdentifier
@@ -35,6 +38,13 @@ pub enum TypedExpression
     Identifier
     {
         id: TypedIdentifier,
+        returned: TypeInfo,
+        loc: TextLoc,
+    },
+    Lambda 
+    {
+        parameters: Vec<(String, TypeInfo)>,
+        body: Box<TypedStatement>,
         returned: TypeInfo,
         loc: TextLoc,
     },
@@ -90,13 +100,14 @@ pub enum TypedExpression
     },
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct ExprCheckArgs<'a>
 {
     pub operators: &'a GlobalOperators,
     pub context: &'a InfoContext,
-    pub var_stack: &'a VariableStack,
+    pub var_stack: Shared<VariableStack>,
     pub file: &'a FileNode,
+    pub fn_ret_type: Option<&'a TypeInfo>,
     pub self_type: Option<&'a TypeInfo>,
 }
 
@@ -104,7 +115,7 @@ impl<'a> ExprCheckArgs<'a>
 {
     pub fn resolve_name(&self, token: &Token) -> Result<TypedIdentifier, TypeError>
     {
-        if let Some(var) = self.var_stack.resolve_var(token.value_string().unwrap())
+        if let Some(var) = self.var_stack.get().resolve_var(token.value_string().unwrap())
         {
             return Ok(TypedIdentifier::Variable(var));
         }
@@ -123,11 +134,23 @@ impl<'a> ExprCheckArgs<'a>
         let err = TypeError::UnknownIdentifier(token.value_string().unwrap().clone(), token.get_loc(&self.file.info));
         Err(err)
     }
+
+    pub fn to_stmt_args<'c>(&self, return_type: Option<&'c TypeInfo>) -> StmtCheckArgs<'c> where 'a : 'c
+    {
+        StmtCheckArgs { 
+            operators: self.operators, 
+            context: self.context, 
+            file: self.file, 
+            var_stack: self.var_stack.clone(), 
+            fn_ret_type: return_type, 
+            self_type: self.self_type
+        }
+    }
 }
 
 impl TypedExpression 
 {
-    pub fn check_expr(expr: &Expression, args: ExprCheckArgs, expected: Option<&TypeInfo>) -> Result<TypedExpression, TypeError>
+    pub fn check_expr(expr: &Expression, args: &ExprCheckArgs, expected: Option<&TypeInfo>) -> Result<TypedExpression, TypeError>
     {
         let gotten = match expr 
         {
@@ -197,7 +220,64 @@ impl TypedExpression
                     return Err(TypeError::CannotInferExpression(loc));
                 };
                 
+                let returned = TypeInfo::Array(Box::new(returned));
                 Ok(TypedExpression::Array { expressions: checked, returned, loc})
+            },
+            Expression::Lambda(lambda) => {
+                let loc = lambda.get_pos().get_loc(&args.file.info);
+                let LambdaExpr { params, arrow: _, body } = lambda;
+
+                let (parameters, ret_type) = match params {
+                    LambdaParams::Simple(_) => return Err(TypeError::InvalidLambdaExpressionFormat(loc.clone())),
+                    LambdaParams::Empty { pipes: _, return_type } => {
+                        let return_type = match return_type {
+                            Some((_, r)) => TypeInfo::from(r, &args.context.type_resolver, args.file)?,
+                            None => (*VOID_TYPE).clone()
+                        };
+
+
+                        (vec![], return_type)
+                    },
+                    LambdaParams::Complex { open_pipe: _, parameters, close_pipe: _, arrow: _, return_type } => {
+                        let return_type = match return_type {
+                            Some(r) => TypeInfo::from(r, &args.context.type_resolver, args.file)?,
+                            None => (*VOID_TYPE).clone()
+                        };
+
+                        let params = parameters.iter().map(|p| -> Result<(String, TypeInfo), TypeError> {
+                            let name = p.name.value_string().unwrap().clone();
+                            let Some((_, type_name)) = &p.type_name else {
+                                return Err(TypeError::InvalidLambdaExpressionFormat(loc.clone()));
+                            };
+
+                            let type_info = TypeInfo::from(type_name, &args.context.type_resolver, args.file)?;
+                            Ok((name, type_info))
+                        }).collect::<Result<Vec<_>, _>>()?;
+
+                        (params, return_type)
+                    },
+                };
+                
+                let Right(block) = body else {
+                    return Err(TypeError::InvalidLambdaExpressionFormat(loc));
+                };
+
+                let body = match TypedStatement::check_block(block, &args.to_stmt_args(Some(&ret_type))) {
+                    Ok(ok) => ok,
+                    Err(e) => return Err(e[0].clone())
+                };
+
+                let returned = TypeInfo::Function { args: parameters.iter().map(|p| p.1.clone()).collect(), returned: Box::new(ret_type) };
+
+                Ok(Self::Lambda { 
+                    parameters, 
+                    body: Box::new(body), 
+                    returned, 
+                    loc 
+                })
+            },
+            Expression::Grouping(g) => {
+                Self::check_expr(&g.expression, args, expected)
             }
             Expression::Binary(BinaryExpr { left, operator, right }) => {
                 let checked_left = TypedExpression::check_expr(&left, args, None)?;
@@ -223,8 +303,42 @@ impl TypedExpression
                     }
                 }
             },
-            Expression::Cast(CastExpr { expression, as_tok, type_name }) => {
-                
+            Expression::Cast(CastExpr { expression, as_tok: _, type_name }) => {
+
+                let loc = (expression.get_pos() + type_name.get_pos()).get_loc(&args.file.info);
+                let type_info = TypeInfo::from(type_name, &args.context.type_resolver, args.file)?;
+                let expr = Self::check_expr(&expression, args, None)?;
+
+                let Some(returned) = args.operators.evaluate_cast(expr.returned(), &type_info) else {
+                    return Err(TypeError::NoCastOperator { 
+                        loc, 
+                        expr_type: expr.returned().pretty_print(&args.context.structs), 
+                        cast_type: type_info.pretty_print(&args.context.structs)
+                    });
+                };
+
+                Ok(Self::Cast { casted: Box::new(expr), type_info, returned, loc })
+            },
+            Expression::Index(IndexExpr { expression, open_bracket: _, indexer, close_bracket  }) => {
+
+                let loc = (expression.get_pos() + close_bracket.pos).get_loc(&args.file.info);
+                let indexed = Self::check_expr(&expression, args, None)?;
+                let arg = Self::check_expr(&indexer, args, None)?;
+
+                let Some(returned) = args.operators.evaluate_index(&indexed.returned(), &arg.returned()) else {
+                    return Err(TypeError::NoIndexOperator { 
+                        loc, 
+                        indexed_type: indexed.returned().pretty_print(&args.context.structs), 
+                        arg_type: arg.returned().pretty_print(&args.context.structs)
+                    });
+                };
+
+                Ok(Self::Index { 
+                    indexed: Box::new(indexed), 
+                    arg: Box::new(arg), 
+                    returned, 
+                    loc 
+                })
             }
             Expression::Unary(UnaryExpr { operator, expression }) => {
                 let expr = TypedExpression::check_expr(&expression, args, expected)?;
@@ -269,7 +383,7 @@ impl TypedExpression
 
                 let returned = match &res_id {
                     TypedIdentifier::Function(id) => args.context.funcs.get(id).unwrap().get_type_info(),
-                    TypedIdentifier::Variable(id) => args.var_stack.get_var(id).type_info.clone(),
+                    TypedIdentifier::Variable(id) => args.var_stack.get().get_var(id).type_info.clone(),
                 };
                 
                 Ok(TypedExpression::Identifier { id: res_id, returned, loc: id.get_loc(&args.file.info) })
@@ -360,6 +474,20 @@ impl TypedExpression
         }
     }
 
+    pub fn is_assignable(&self) -> bool 
+    {
+        match self 
+        {
+            Self::Access { accessed: _, name: _, returned: _, loc: _ } => todo!(),
+            Self::Identifier { id, returned: _, loc: _ } => match id {
+                TypedIdentifier::Function(_) => false,
+                TypedIdentifier::Variable(_) => true,
+            }
+            Self::Index { indexed: _, arg: _, returned: _, loc: _ } => true,
+            _ => false,
+        }
+    }
+
     pub fn returned(&self) -> &TypeInfo
     {
         match self 
@@ -374,6 +502,7 @@ impl TypedExpression
             TypedExpression::Construction { type_id: _, args: _, returned, loc: _ } => returned,
             TypedExpression::Identifier { id: _, returned, loc: _ } => returned,
             TypedExpression::Array { expressions: _, returned, loc: _ } => returned,
+            TypedExpression::Lambda { parameters: _, body: _, returned, loc: _ } => returned,
         }
     }
 
@@ -391,11 +520,12 @@ impl TypedExpression
             TypedExpression::Construction { type_id: _, args: _, returned: _, loc } => loc,
             TypedExpression::Identifier { id: _, returned: _, loc } => loc,
             TypedExpression::Array { expressions: _, returned: _, loc } => loc,
+            TypedExpression::Lambda { parameters: _, body: _, returned: _, loc } => loc,
         }
     }
 }
 
-fn check_expected(expected: Option<&TypeInfo>, gotten: &TypeInfo, args: ExprCheckArgs<'_>, pos: TextPos) -> Result<(), TypeError> 
+fn check_expected(expected: Option<&TypeInfo>, gotten: &TypeInfo, args: &ExprCheckArgs<'_>, pos: TextPos) -> Result<(), TypeError> 
 {
     if expected.is_some_and(|e| e != gotten)
     {
@@ -405,7 +535,7 @@ fn check_expected(expected: Option<&TypeInfo>, gotten: &TypeInfo, args: ExprChec
     Ok(())
 }
 
-fn check_construction_args(info: &StructInfo, con_args: &[ConstructionArg], args: ExprCheckArgs, pos: TextPos) -> Result<Vec<(String, TypedExpression)>, TypeError>
+fn check_construction_args(info: &StructInfo, con_args: &[ConstructionArg], args: &ExprCheckArgs, pos: TextPos) -> Result<Vec<(String, TypedExpression)>, TypeError>
 {
     let members = info.members();
     let mut members = members.iter()

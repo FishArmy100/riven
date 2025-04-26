@@ -28,6 +28,23 @@ pub enum TypeError
     CannotInferExpression(TextLoc),
     CannotDefineParentTypeTwice(TextLoc),
     CannotUseSelfInContext(TextLoc),
+    NoCastOperator
+    {
+        loc: TextLoc,
+        expr_type: String,
+        cast_type: String,
+    },
+    NoIndexOperator
+    {
+        loc: TextLoc,
+        indexed_type: String,
+        arg_type: String,
+    },
+    InvalidLambdaExpressionFormat(TextLoc),
+    ExpressionNotAssignable(TextLoc),
+    DuplicateMainFn(TextLoc),
+    NoMainFn,
+    InvalidMainArgs(TextLoc)
 }
 
 impl CompilerError for TypeError
@@ -57,34 +74,48 @@ impl CompilerError for TypeError
             TypeError::CannotInferExpression(_) => format!("Cannot infer expression type"),
             TypeError::CannotDefineParentTypeTwice(_) => format!("Cannot define parent type multiple times"),
             TypeError::CannotUseSelfInContext(_) => format!("Cannot use `self`, in this context"),
+            TypeError::NoCastOperator { loc: _, expr_type, cast_type } => format!("No cast operator from type {} to type {}", expr_type, cast_type),
+            TypeError::InvalidLambdaExpressionFormat(_) => format!("Invalid lambda expression format; please use the format `|...| -> ... => {{}}`, other variants will be added in upcoming versions"),
+            TypeError::NoIndexOperator { loc: _, indexed_type, arg_type } => format!("No index operator {}[{}]", indexed_type, arg_type),
+            TypeError::ExpressionNotAssignable(_) => format!("Expression type is not assignable"),
+            TypeError::DuplicateMainFn(_) => format!("Duplicate main function found"),
+            TypeError::NoMainFn => format!("No main function found"),
+            TypeError::InvalidMainArgs(_) => format!("Invalid main args"),
         }
     }
 
-    fn loc(&self) -> TextLoc 
+    fn loc(&self) -> Option<TextLoc> 
     {
         match self 
         {
-            TypeError::UnknownType(_, loc) => loc.clone(),
-            TypeError::DuplicateTypeDef(_, loc) => loc.clone(),
-            TypeError::UnknownUsing(_, loc) => loc.clone(),
-            TypeError::ConflictingTypes(_, loc) => loc.clone(),
-            TypeError::NoBinaryOp(_, _, _, loc) => loc.clone(),
-            TypeError::NoUnaryOp(_, _, loc) => loc.clone(),
-            TypeError::CannotConstruct(_, loc) => loc.clone(),
-            TypeError::InvalidConstructionArgs(loc) => loc.clone(),
-            TypeError::ConflictingFunctions(_, loc) => loc.clone(),
-            TypeError::UndefinedFunction(_, loc) => loc.clone(),
-            TypeError::ExpectedType(_, loc) => loc.clone(),
-            TypeError::FunctionArgumentNeedsInitializer(loc) => loc.clone(),
-            TypeError::UnknownIdentifier(_, loc) => loc.clone(),
-            TypeError::ExpectedFunction(loc) => loc.clone(),
-            TypeError::InvalidCallArgs(_, loc) => loc.clone(),
-            TypeError::ExpectedAnIterator(loc) => loc.clone(),
-            TypeError::UnknownVariable(_, loc) => loc.clone(),
-            TypeError::FunctionMustReturn(loc) => loc.clone(),
-            TypeError::CannotInferExpression(loc) => loc.clone(),
-            TypeError::CannotDefineParentTypeTwice(loc) => loc.clone(),
-            TypeError::CannotUseSelfInContext(loc) => loc.clone(),
+            TypeError::UnknownType(_, loc) => Some(loc.clone()),
+            TypeError::DuplicateTypeDef(_, loc) => Some(loc.clone()),
+            TypeError::UnknownUsing(_, loc) => Some(loc.clone()),
+            TypeError::ConflictingTypes(_, loc) => Some(loc.clone()),
+            TypeError::NoBinaryOp(_, _, _, loc) => Some(loc.clone()),
+            TypeError::NoUnaryOp(_, _, loc) => Some(loc.clone()),
+            TypeError::CannotConstruct(_, loc) => Some(loc.clone()),
+            TypeError::InvalidConstructionArgs(loc) => Some(loc.clone()),
+            TypeError::ConflictingFunctions(_, loc) => Some(loc.clone()),
+            TypeError::UndefinedFunction(_, loc) => Some(loc.clone()),
+            TypeError::ExpectedType(_, loc) => Some(loc.clone()),
+            TypeError::FunctionArgumentNeedsInitializer(loc) => Some(loc.clone()),
+            TypeError::UnknownIdentifier(_, loc) => Some(loc.clone()),
+            TypeError::ExpectedFunction(loc) => Some(loc.clone()),
+            TypeError::InvalidCallArgs(_, loc) => Some(loc.clone()),
+            TypeError::ExpectedAnIterator(loc) => Some(loc.clone()),
+            TypeError::UnknownVariable(_, loc) => Some(loc.clone()),
+            TypeError::FunctionMustReturn(loc) => Some(loc.clone()),
+            TypeError::CannotInferExpression(loc) => Some(loc.clone()),
+            TypeError::CannotDefineParentTypeTwice(loc) => Some(loc.clone()),
+            TypeError::CannotUseSelfInContext(loc) => Some(loc.clone()),
+            TypeError::NoCastOperator { loc, expr_type: _, cast_type: _ } => Some(loc.clone()),
+            TypeError::InvalidLambdaExpressionFormat(loc) => Some(loc.clone()),
+            TypeError::NoIndexOperator { loc, indexed_type: _, arg_type: _ } => Some(loc.clone()),
+            TypeError::ExpressionNotAssignable(loc) => Some(loc.clone()),
+            TypeError::DuplicateMainFn(text_loc) => Some(text_loc.clone()),
+            TypeError::NoMainFn => None,
+            TypeError::InvalidMainArgs(text_loc) => Some(text_loc.clone()),
         }
     }
 }

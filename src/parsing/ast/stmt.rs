@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use either::Either;
 
-use crate::{lexing::token::Token, utils::{FileInfo, PathInfo}};
+use crate::{lexing::token::Token, utils::FileInfo};
 
 use super::{Expression, TypeName};
 
@@ -48,7 +48,7 @@ pub struct ConstStmt
 #[derive(Debug, Clone)]
 pub struct AssignStmt
 {
-    pub value: Token,
+    pub assigned: Box<Expression>,
     pub equal: Token,
     pub expression: Expression,
     pub semi_colon: Token,

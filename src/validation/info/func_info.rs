@@ -25,7 +25,8 @@ pub struct FuncInfoParam
 {
     pub name: String,
     pub type_info: TypeInfo,
-    pub init: Option<Arc<Expression>>
+    pub init: Option<Arc<Expression>>,
+    pub id: Uuid, // is the variable id
 }
 
 #[derive(Debug, Clone)]
@@ -71,7 +72,7 @@ impl FuncInfo
     pub fn new(decl: Arc<FnDecl>, resolver: &TypeResolver, func_resolver: &FuncResolver, file: Arc<FileNode>) -> Result<Self, TypeError>
     {
         let name = decl.id.value_string().unwrap().clone();
-        let id = func_resolver.get_func_id(&file.info.path.split_relative(), &name).unwrap();
+        let fn_id = func_resolver.get_func_id(&file.info.path.split_relative(), &name).unwrap();
 
         let parent = decl.type_name.as_ref().map(|(_, t)| TypeInfo::from(t, resolver, &file));
         if let Some(Err(e)) = parent {
@@ -104,6 +105,7 @@ impl FuncInfo
                 name: p.id.value_string().unwrap().clone(),
                 type_info,
                 init: m_has_init,
+                id: Uuid::new_v4(),
             })
         }).collect::<Result<Vec<_>, _>>()?;
 
@@ -112,7 +114,8 @@ impl FuncInfo
             parameters.insert(0, FuncInfoParam { 
                 name: "self".into(), 
                 type_info: parent.as_ref().unwrap().clone(), 
-                init: None 
+                init: None,
+                id: Uuid::new_v4(), 
             });
         }
 
@@ -122,7 +125,7 @@ impl FuncInfo
         };
 
         Ok(FuncInfo { 
-            id, 
+            id: fn_id, 
             name, 
             parent,
             has_self: decl.self_param.is_some(),

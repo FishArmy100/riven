@@ -2,7 +2,7 @@ use uuid::Uuid;
 
 use crate::validation::info::struct_info::StructDeclData;
 
-use super::{info::{struct_info::StructInfo, types::TypeInfo}, operators::{BinaryOp, BinaryOpType, GlobalOperators, UnaryOp, UnaryOpType}};
+use super::{info::{struct_info::StructInfo, types::TypeInfo}, operators::{BinaryOp, BinaryOpType, CastOp, GlobalOperators, IndexOp, UnaryOp, UnaryOpType}};
 
 pub const INT_TYPE_NAME: &str = "Int";
 pub const FLOAT_TYPE_NAME: &str = "Float";
@@ -72,6 +72,8 @@ pub fn get_operators() -> GlobalOperators
     make_int_type_ops(&mut operators);
     make_float_type_ops(&mut operators);
     make_string_type_ops(&mut operators);
+    add_cast_ops(&mut operators);
+    add_index_ops(&mut operators);
 
     operators
 }
@@ -137,6 +139,70 @@ fn add_equality_ops(ops: &mut GlobalOperators, ty: TypeInfo)
     ops.add_binary_op(BinaryOp::make_isosceles(ty.clone(), bool_type.clone(), BinaryOpType::GreaterThan));
     ops.add_binary_op(BinaryOp::make_isosceles(ty.clone(), bool_type.clone(), BinaryOpType::LessThanEqual));
     ops.add_binary_op(BinaryOp::make_isosceles(ty.clone(), bool_type.clone(), BinaryOpType::GreaterThanEqual));
+}
+
+fn add_cast_ops(ops: &mut GlobalOperators)
+{
+    // Int as Int, ...
+    ops.add_cast_op(CastOp {
+        checker: Box::new(|e: &TypeInfo, c: &TypeInfo| -> Option<TypeInfo> {
+            if e == c 
+            {
+                Some(c.clone())
+            }
+            else 
+            {
+                None    
+            }
+        })
+    });
+
+    // Int as Int?, ...
+    ops.add_cast_op(CastOp {
+        checker: Box::new(|e: &TypeInfo, c: &TypeInfo| -> Option<TypeInfo> {
+            let TypeInfo::Optional(i) = c else {
+                return None;
+            };
+
+            if e == &**i 
+            {
+                Some(c.clone())
+            }
+            else 
+            {
+                None    
+            }
+        })
+    });
+}
+
+fn add_index_ops(ops: &mut GlobalOperators)
+{
+    ops.add_index_op(IndexOp {
+        checker: Box::new(|i: &TypeInfo, a: &TypeInfo| -> Option<TypeInfo> {
+            if a != &*INT_TYPE
+            {
+                return None;
+            }
+
+            let TypeInfo::Array(inner) = i else {
+                return None;
+            };
+
+            Some(inner.as_ref().clone())
+        })
+    });
+
+    ops.add_index_op(IndexOp {
+        checker: Box::new(|i: &TypeInfo, a: &TypeInfo| -> Option<TypeInfo> {
+            if i == &*STRING_TYPE && a == &*INT_TYPE
+            {
+                return Some(STRING_TYPE.clone());
+            }
+            
+            None
+        })
+    });
 }
 
 fn add_string_concat_op(ops: &mut GlobalOperators, other: TypeInfo)

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, fmt::format, sync::Arc};
 
 use uuid::Uuid;
 
@@ -7,11 +7,15 @@ use crate::{lexing::{self, token::{Token, TokenType}}, parsing::{self, ast::{Blo
 pub trait CompilerError
 {
     fn msg(&self) -> String;
-    fn loc(&self) -> TextLoc;
+    fn loc(&self) -> Option<TextLoc>;
 
     fn format_error(&self) -> String 
     {
-        format!("[{}]: {}", self.loc(), self.msg())
+        match self.loc()
+        {
+            Some(loc) => format!("[{}]: {}", loc, self.msg()),
+            None => format!("{}", self.msg())
+        }
     }
 }
 

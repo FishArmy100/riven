@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use uuid::Uuid;
 
-use crate::{parsing::ast::FileNode, validation::{ast::{ExprCheckArgs, TypedExpression}, info::{struct_info::{StructDeclData, StructInfo}, types::TypeInfo, InfoContext}, operators::GlobalOperators, type_error::TypeError}};
+use crate::{parsing::ast::FileNode, utils::Shared, validation::{ast::{ExprCheckArgs, TypedExpression}, info::{struct_info::{StructDeclData, StructInfo}, types::TypeInfo, InfoContext}, operators::GlobalOperators, type_error::TypeError}};
 
 use super::var_def::VariableStack;
 
@@ -27,7 +27,7 @@ impl StructDef
 {
     pub fn new(info: &StructInfo, context: &InfoContext, operators: &GlobalOperators) -> Result<Self, Vec<TypeError>>
     {
-        let var_stack = VariableStack::new();
+        let var_stack = Shared::new(VariableStack::new());
 
         let (_, file, s_members) = match &info.decl_data
         {
@@ -45,9 +45,10 @@ impl StructDef
         let check_args = ExprCheckArgs {
             operators,
             context,
-            var_stack: &var_stack,
+            var_stack: var_stack.clone(),
             file: &file,
             self_type: None,
+            fn_ret_type: None,
         };
 
         let mut errors = vec![];
@@ -56,7 +57,7 @@ impl StructDef
         for (name, member) in s_members
         {
             let init = if let Some(init) = &member.init {
-                let checked_init = match TypedExpression::check_expr(init, check_args, Some(&member.type_info)) {
+                let checked_init = match TypedExpression::check_expr(init, &check_args, Some(&member.type_info)) {
                     Ok(ok) => ok,
                     Err(e) => {
                         errors.push(e);

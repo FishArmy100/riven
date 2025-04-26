@@ -18,12 +18,12 @@ pub enum LexerError
 
 impl CompilerError for LexerError
 {
-    fn loc(&self) -> TextLoc
+    fn loc(&self) -> Option<TextLoc>
     {
         match self 
         {
-            Self::UnknownToken(_, loc) => loc.clone(),
-            Self::UnterminatedString(loc) => loc.clone(),
+            Self::UnknownToken(_, loc) => Some(loc.clone()),
+            Self::UnterminatedString(loc) => Some(loc.clone()),
         }
     }
 

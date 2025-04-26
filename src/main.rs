@@ -13,9 +13,10 @@ pub mod validation;
 fn main() 
 {
     let file_1 = parse_file("tests/test.rvn", "src/test");
+    let file_2 = parse_file("tests/debug.rvn", "src/debug");
 
     let program = Program {
-        files: vec![file_1]
+        files: vec![file_1, file_2]
     };
 
     println!("Context compiled");

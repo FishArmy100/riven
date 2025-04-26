@@ -31,19 +31,19 @@ pub enum ParserError
 
 impl CompilerError for ParserError
 {
-    fn loc(&self) -> TextLoc
+    fn loc(&self) -> Option<TextLoc>
     {
         match self 
         {
-            ParserError::ExpectedExpression(loc) => loc.clone(),
-            ParserError::ExpectedType(loc) => loc.clone(),
-            ParserError::ExpectedToken(_, loc) => loc.clone(),
-            ParserError::ExpectedTokens(_, loc) => loc.clone(),
-            ParserError::ExpectedALambdaParameter(loc) => loc.clone(),
-            ParserError::ExpectedStatement(loc) => loc.clone(),
-            ParserError::ExpectedBlock(loc) => loc.clone(),
-            ParserError::ExpectedDeclaration(loc) => loc.clone(),
-            ParserError::ExpectedALambdaBody(loc) => loc.clone(),
+            ParserError::ExpectedExpression(loc) => Some(loc.clone()),
+            ParserError::ExpectedType(loc) => Some(loc.clone()),
+            ParserError::ExpectedToken(_, loc) => Some(loc.clone()),
+            ParserError::ExpectedTokens(_, loc) => Some(loc.clone()),
+            ParserError::ExpectedALambdaParameter(loc) => Some(loc.clone()),
+            ParserError::ExpectedStatement(loc) => Some(loc.clone()),
+            ParserError::ExpectedBlock(loc) => Some(loc.clone()),
+            ParserError::ExpectedDeclaration(loc) => Some(loc.clone()),
+            ParserError::ExpectedALambdaBody(loc) => Some(loc.clone()),
         }
     }
 

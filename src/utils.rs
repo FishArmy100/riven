@@ -1,4 +1,4 @@
-use std::{fs::{create_dir_all, File, OpenOptions}, io::{Read, Write}, ops::Add, path::Path, sync::Arc};
+use std::{cell::{Ref, RefCell, RefMut}, fs::{create_dir_all, File, OpenOptions}, io::{Read, Write}, ops::Add, path::Path, rc::Rc, sync::{Arc, Mutex, MutexGuard}};
 
 use uuid::Uuid;
 
@@ -227,5 +227,55 @@ impl FileInfo
     pub fn as_arc(self) -> Arc<Self>
     {
         Arc::new(self)
+    }
+}
+
+#[derive(Debug)]
+pub struct Shared<T>(Rc<RefCell<T>>);
+
+impl<T> Shared<T>
+{
+    pub fn new(v: T) -> Self
+    {
+        Self(Rc::new(RefCell::new(v)))
+    }
+
+    pub fn get(&self) -> Ref<'_, T>
+    {
+        self.0.borrow()
+    }
+
+    pub fn get_mut(&self) -> RefMut<'_, T>
+    {
+        self.0.borrow_mut()
+    }
+
+    pub fn inner(&self) -> &Rc<RefCell<T>>
+    {
+        &self.0
+    }
+}
+
+impl<T> From<Rc<RefCell<T>>> for Shared<T>
+{
+    fn from(value: Rc<RefCell<T>>) -> Self 
+    {
+        Self(value)
+    }
+}
+
+impl<T> From<Shared<T>> for Rc<RefCell<T>>
+{
+    fn from(value: Shared<T>) -> Self 
+    {
+        value.0
+    }
+}
+
+impl<T> Clone for Shared<T>
+{
+    fn clone(&self) -> Self 
+    {
+        Self(self.0.clone())
     }
 }

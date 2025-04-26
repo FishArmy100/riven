@@ -1,7 +1,25 @@
 use system.io;
 
-const BOARD_SIZE: Int = 3;
-const EMPTY_CELL: Int = " ";
+// consts not implemented yet
+fn BOARD_SIZE() -> Int { return 3; };
+fn EMPTY_CELL() String { return " " };
+
+fn range(min: Int, max: Int) -> Fn() -> ?Int 
+{
+    let i = min;
+    return || -> ?Int => {
+        if (i < max) 
+        {
+            let old = i;
+            i = i + 1;
+            return old as ?Int;
+        }
+        else
+        {
+            return null;
+        }
+    };
+}
 
 struct Game
 {
@@ -13,9 +31,9 @@ fn Game.new() -> Game
 {
     return Game {
         board: [
-            EMPTY_CELL, EMPTY_CELL, EMPTY_CELL, 
-            EMPTY_CELL, EMPTY_CELL, EMPTY_CELL, 
-            EMPTY_CELL, EMPTY_CELL, EMPTY_CELL
+            EMPTY_CELL(), EMPTY_CELL(), EMPTY_CELL(), 
+            EMPTY_CELL(), EMPTY_CELL(), EMPTY_CELL(), 
+            EMPTY_CELL(), EMPTY_CELL(), EMPTY_CELL()
         ],
         
         current_player: "X"
@@ -24,19 +42,19 @@ fn Game.new() -> Game
 
 fn Game.print_board(self)
 {
-    for (i in range(0, BOARD_SIZE))
+    for (i in range(0, BOARD_SIZE()))
     {
-        for (j in range(0, BOARD_SIZE))
+        for (j in range(0, BOARD_SIZE()))
         {
             print(" ");
-            print(self.board[i * BOARD_SIZE + j]);
-            if (j < BOARD_SIZE - 1)
+            print(self.board[i * BOARD_SIZE() + j]);
+            if (j < BOARD_SIZE() - 1)
             {
                 print(" |");
             }
         }
         println("");
-        if (i < BOARD_SIZE - 1)
+        if (i < BOARD_SIZE() - 1)
         {
             println("---+---+---");
         }
@@ -46,7 +64,7 @@ fn Game.print_board(self)
 
 fn Game.make_move(self, pos: Int) -> Bool
 {
-    if (pos < 0 || pos >= BOARD_SIZE * BOARD_SIZE || self.board[pos] != EMPTY_CELL)
+    if (pos < 0 || pos >= BOARD_SIZE() * BOARD_SIZE() || self.board[pos] != EMPTY_CELL())
     {
         println("Invalid move.");
         return false;
@@ -57,34 +75,34 @@ fn Game.make_move(self, pos: Int) -> Bool
 
 fn Game.check_win(self) -> Bool
 {
-    for (i in range(0, BOARD_SIZE))
+    for (i in range(0, BOARD_SIZE()))
     {
-        if (self.board[i * BOARD_SIZE] != EMPTY_CELL &&
-           self.board[i * BOARD_SIZE] == self.board[i * BOARD_SIZE + 1] &&
-           self.board[i * BOARD_SIZE + 1] == self.board[i * BOARD_SIZE + 2])
+        if (self.board[i * BOARD_SIZE()] != EMPTY_CELL() &&
+           self.board[i * BOARD_SIZE()] == self.board[i * BOARD_SIZE() + 1] &&
+           self.board[i * BOARD_SIZE() + 1] == self.board[i * BOARD_SIZE() + 2])
         {
             return true;
         }
     }
 
-    for (i in range(0, BOARD_SIZE))
+    for (i in range(0, BOARD_SIZE()))
     {
-        if (self.board[i] != EMPTY_CELL &&
-           self.board[i] == self.board[i + BOARD_SIZE] &&
-           self.board[i + BOARD_SIZE] == self.board[i + 2 * BOARD_SIZE])
+        if (self.board[i] != EMPTY_CELL() &&
+           self.board[i] == self.board[i + BOARD_SIZE()] &&
+           self.board[i + BOARD_SIZE()] == self.board[i + 2 * BOARD_SIZE()])
         {
             return true;
         }
     }
 
-    if (self.board[0] != EMPTY_CELL &&
+    if (self.board[0] != EMPTY_CELL() &&
        self.board[0] == self.board[4] &&
        self.board[4] == self.board[8])
     {
         return true;
     }
 
-    if (self.board[2] != EMPTY_CELL &&
+    if (self.board[2] != EMPTY_CELL() &&
        self.board[2] == self.board[4] &&
        self.board[4] == self.board[6])
     {
@@ -96,9 +114,9 @@ fn Game.check_win(self) -> Bool
 
 fn Game.is_draw(self) -> Bool
 {
-    for (i in range(0, BOARD_SIZE * BOARD_SIZE))
+    for (i in range(0, BOARD_SIZE() * BOARD_SIZE()))
     {
-        if (self.board[i] == EMPTY_CELL)
+        if (self.board[i] == EMPTY_CELL())
         {
             return false;
         }

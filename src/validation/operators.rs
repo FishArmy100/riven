@@ -7,7 +7,8 @@ pub struct GlobalOperators
 {
     binary_ops: HashMap<BinaryOpType, Vec<BinaryOp>>,
     unary_ops: HashMap<UnaryOpType, Vec<UnaryOp>>,
-    cast_ops: HashMap<TypeInfo, Vec<CastOp>>
+    cast_ops: Vec<CastOp>,
+    index_ops: Vec<IndexOp>,
 }
 
 impl GlobalOperators
@@ -18,7 +19,8 @@ impl GlobalOperators
         {
             binary_ops: HashMap::new(),
             unary_ops: HashMap::new(),
-            cast_ops: HashMap::new(),
+            cast_ops: vec![],
+            index_ops: vec![]
         }
     }
 
@@ -54,24 +56,22 @@ impl GlobalOperators
 
     pub fn add_cast_op(&mut self, op: CastOp)
     {
-        let ops = self.cast_ops.entry(op.caster.clone()).or_default();
-        ops.push(op);
+        self.cast_ops.push(op);
     }
 
-    pub fn evaluate_cast(&self, value_type: &TypeInfo, cast_type: &TypeInfo) -> Option<TypeInfo>
+    pub fn evaluate_cast(&self, expr_type: &TypeInfo, cast_type: &TypeInfo) -> Option<TypeInfo>
     {
-        let Some(ops) = self.cast_ops.get(&cast_type) else {
-            return None;
-        };
+        self.cast_ops.iter().find_map(|o| (o.checker)(expr_type, cast_type))
+    }
 
-        if ops.iter().any(|o| (o.checker)(value_type))
-        {
-            Some(cast_type.clone())
-        }
-        else 
-        {
-            None
-        }
+    pub fn add_index_op(&mut self, op: IndexOp)
+    {
+        self.index_ops.push(op);
+    }
+
+    pub fn evaluate_index(&self, indexed_type: &TypeInfo, arg_type: &TypeInfo) -> Option<TypeInfo>
+    {
+        self.index_ops.iter().find_map(|o| (o.checker)(indexed_type, arg_type))
     }
 }
 
@@ -213,19 +213,32 @@ pub struct UnaryOp
 
 pub struct CastOp
 {
-    pub checker: Box<dyn Fn(&TypeInfo) -> bool>,
-    pub caster: TypeInfo // value as This
+    pub checker: Box<dyn Fn(&TypeInfo, &TypeInfo) -> Option<TypeInfo>>,
 }
 
 impl CastOp
 {
-    pub fn simple(castee: TypeInfo, type_to_cast_to: TypeInfo) -> Self 
+    pub fn simple(expr_type: TypeInfo, cast_type: TypeInfo) -> Self 
     {
-        let checker = Box::new(move |a: &TypeInfo| -> bool { *a == castee });
+        let checker = Box::new(move |a: &TypeInfo, b: &TypeInfo| -> Option<TypeInfo> 
+        { 
+            if *a == expr_type && *b == cast_type 
+            {
+                Some(cast_type.clone())
+            } 
+            else 
+            {
+                None    
+            }
+        });
         Self 
         {
             checker,
-            caster: type_to_cast_to,
         }
     }
+}
+
+pub struct IndexOp 
+{
+    pub checker: Box<dyn Fn(&TypeInfo, &TypeInfo) -> Option<TypeInfo>> // (indexed, arg) -> value
 }
