@@ -1,8 +1,8 @@
-use std::collections::HashMap;
-
 use uuid::Uuid;
 
-use super::{defs::struct_def::StructDef, info::types::TypeInfo, operators::{BinaryOp, BinaryOpType, GlobalOperators, UnaryOp, UnaryOpType}};
+use crate::validation::info::struct_info::StructDeclData;
+
+use super::{info::{struct_info::StructInfo, types::TypeInfo}, operators::{BinaryOp, BinaryOpType, GlobalOperators, UnaryOp, UnaryOpType}};
 
 pub const INT_TYPE_NAME: &str = "Int";
 pub const FLOAT_TYPE_NAME: &str = "Float";
@@ -25,41 +25,41 @@ lazy_static::lazy_static!
     pub static ref VOID_TYPE: TypeInfo =    TypeInfo::Primary(VOID_ID.clone());
 }
 
-pub fn get_builtins() -> Vec<StructDef>
+pub fn get_builtins() -> Vec<StructInfo>
 {
-    let int_type = StructDef {
+    let int_type = StructInfo {
         name: INT_TYPE_NAME.into(),
         id: INT_ID.clone(),
-        members: vec![],
         is_pub: true,
+        decl_data: StructDeclData::Builtin { members: vec![] }
     };
 
-    let float_type = StructDef {
+    let float_type = StructInfo {
         name: FLOAT_TYPE_NAME.into(),
         id: FLOAT_ID.clone(),
-        members: vec![],
         is_pub: true,
+        decl_data: StructDeclData::Builtin { members: vec![] }
     };
 
-    let bool_type = StructDef {
+    let bool_type = StructInfo {
         name: BOOL_TYPE_NAME.into(),
         id: BOOL_ID.clone(),
-        members: vec![],
         is_pub: true,
+        decl_data: StructDeclData::Builtin { members: vec![] }
     };
 
-    let string_type = StructDef {
+    let string_type = StructInfo {
         name: STRING_TYPE_NAME.into(),
         id: STRING_ID.clone(),
-        members: vec![],
         is_pub: true,
+        decl_data: StructDeclData::Builtin { members: vec![] }
     };
 
-    let void_type = StructDef {
+    let void_type = StructInfo {
         name: VOID_TYPE_NAME.into(),
         id: VOID_ID.clone(),
-        members: vec![],
         is_pub: true,
+        decl_data: StructDeclData::Builtin { members: vec![] }
     };
 
     vec![int_type, float_type, bool_type, string_type, void_type]

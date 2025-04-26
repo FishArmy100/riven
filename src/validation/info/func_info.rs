@@ -16,7 +16,7 @@ pub enum FuncDeclData
     },
     Builtin 
     {
-        params: Vec<Arc<FuncDefParam>>
+        params: Vec<FuncDefParam>
     }
 }
 
@@ -33,6 +33,8 @@ pub struct FuncInfo
 {
     pub id: Uuid,
     pub name: String,
+    pub parent: Option<TypeInfo>,
+    pub has_self: bool,
     pub parameters: Vec<FuncInfoParam>,
     pub returned: TypeInfo,
     pub is_pub: bool,
@@ -70,9 +72,22 @@ impl FuncInfo
     {
         let name = decl.id.value_string().unwrap().clone();
         let id = func_resolver.get_func_id(&file.info.path.split_relative(), &name).unwrap();
+
+        let parent = decl.type_name.as_ref().map(|(_, t)| TypeInfo::from(t, resolver, &file));
+        if let Some(Err(e)) = parent {
+            return Err(e)
+        }
+        let parent = parent.map(|r| r.unwrap());
+
+        let has_self = decl.self_param.is_some();
+        if has_self && !parent.is_some()
+        {
+            return Err(TypeError::CannotUseSelfInContext(decl.self_param.as_ref().unwrap().get_loc(&file.info)))
+        }
+
         let mut has_init = false;
 
-        let parameters = decl.params.iter().map(|p| {
+        let mut parameters = decl.params.iter().map(|p| {
             let type_info = TypeInfo::from(&p.type_name, resolver, &file)?;
             let m_has_init = p.default_value.as_ref().map(|v| v.1.clone());
             if m_has_init.is_some()
@@ -92,6 +107,15 @@ impl FuncInfo
             })
         }).collect::<Result<Vec<_>, _>>()?;
 
+        if has_self
+        {
+            parameters.insert(0, FuncInfoParam { 
+                name: "self".into(), 
+                type_info: parent.as_ref().unwrap().clone(), 
+                init: None 
+            });
+        }
+
         let returned = match &decl.return_type {
             Some((_, type_name)) => TypeInfo::from(&type_name, resolver, &file)?,
             None => VOID_TYPE.clone(),
@@ -100,11 +124,15 @@ impl FuncInfo
         Ok(FuncInfo { 
             id, 
             name, 
+            parent,
+            has_self: decl.self_param.is_some(),
             parameters,
             returned,
             is_pub: decl.pub_tok.is_some(),
-            decl,
-            file
+            decl_data: FuncDeclData::Decl { 
+                decl, 
+                file 
+            }
         })
     }
 

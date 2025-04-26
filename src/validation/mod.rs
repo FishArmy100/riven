@@ -27,7 +27,7 @@ impl CheckedProgram
     pub fn new(program: &Program) -> Result<Self, Vec<TypeError>>
     {
         let context = InfoContext::new(program)?;
-        let operators = GlobalOperators::new();
+        let operators = builtins::get_operators();
 
         let mut errors = vec![];
         let mut structs = vec![];

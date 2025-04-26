@@ -12,7 +12,12 @@ struct Game
 fn Game.new() -> Game
 {
     return Game {
-        board: []String.filled(EMPTY_CELL, BOARD_SIZE * BOARD_SIZE),
+        board: [
+            EMPTY_CELL, EMPTY_CELL, EMPTY_CELL, 
+            EMPTY_CELL, EMPTY_CELL, EMPTY_CELL, 
+            EMPTY_CELL, EMPTY_CELL, EMPTY_CELL
+        ],
+        
         current_player: "X"
     };
 }

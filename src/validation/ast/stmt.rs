@@ -10,6 +10,8 @@ pub struct StmtCheckArgs<'a>
     pub context: &'a InfoContext,
     pub file: &'a FileNode,
     pub var_stack: &'a mut VariableStack,
+    pub fn_ret_type: Option<&'a TypeInfo>,
+    pub self_type: Option<&'a TypeInfo>,
 }
 
 impl<'a> StmtCheckArgs<'a>
@@ -21,6 +23,7 @@ impl<'a> StmtCheckArgs<'a>
             context: self.context,
             var_stack: &self.var_stack, 
             file: self.file, 
+            self_type: self.self_type,
         }
     }
 }
@@ -70,7 +73,7 @@ impl TypedStatement
         {
             Statement::Expression(expr) => {
                 let args = eval_args.expr_check_args();
-                match TypedExpression::check_expr(&expr.expression, args)
+                match TypedExpression::check_expr(&expr.expression, args, None)
                 {
                     Ok(ok) => Ok(TypedStatement::Expr(Box::new(ok))),
                     Err(err) => Err(vec![err]),
@@ -90,7 +93,7 @@ impl TypedStatement
             Statement::While(while_stmt) => {
                 let mut errors = vec![];
                 
-                let condition = match TypedExpression::check_expr(&while_stmt.condition, eval_args.expr_check_args()) {
+                let condition = match TypedExpression::check_expr(&while_stmt.condition, eval_args.expr_check_args(), Some(&BOOL_TYPE)) {
                     Ok(ok) => Some(ok), 
                     Err(err) => {
                         errors.push(err);
@@ -125,7 +128,7 @@ impl TypedStatement
             },
             Statement::For(for_stmt) => {
                 let mut errors = vec![];
-                let condition = match TypedExpression::check_expr(&for_stmt.expression, eval_args.expr_check_args()) {
+                let condition = match TypedExpression::check_expr(&for_stmt.expression, eval_args.expr_check_args(), None) {
                     Ok(ok) => Some(ok), 
                     Err(err) => {
                         errors.push(err);
@@ -133,6 +136,7 @@ impl TypedStatement
                     }
                 };
 
+                // have to check this manually, as we have to pass in None, because the value is generic
                 if !condition.as_ref().is_some_and(|e| !e.returned().is_iter())
                 {
                     let name = BOOL_TYPE.pretty_print(&eval_args.context.structs);
@@ -172,7 +176,7 @@ impl TypedStatement
                     })
                 };
 
-                match TypedExpression::check_expr(expr, args)
+                match TypedExpression::check_expr(expr, args, eval_args.fn_ret_type)
                 {
                     Ok(ok) => Ok(TypedStatement::Return {
                         returned: Some(Box::new(ok)),
@@ -194,7 +198,7 @@ impl TypedStatement
                 };
 
                 let var_type = &eval_args.var_stack.get_var(&id).type_info;
-                let expression = match TypedExpression::check_expr(&assign_stmt.expression, eval_args.expr_check_args()) {
+                let expression = match TypedExpression::check_expr(&assign_stmt.expression, eval_args.expr_check_args(), Some(var_type)) {
                     Ok(ok) => ok,
                     Err(err) => return Err(vec![err])
                 };
@@ -221,7 +225,7 @@ impl TypedStatement
     {
         let mut errors = vec![];
                 
-        let condition = match TypedExpression::check_expr(&stmt.condition, eval_args.expr_check_args()) {
+        let condition = match TypedExpression::check_expr(&stmt.condition, eval_args.expr_check_args(), Some(&BOOL_TYPE)) {
             Ok(ok) => Some(ok), 
             Err(err) => {
                 errors.push(err);
@@ -229,7 +233,7 @@ impl TypedStatement
             }
         };
         
-        if !condition.as_ref().is_some_and(|e| *e.returned() != *BOOL_TYPE)
+        if condition.as_ref().is_some_and(|e| *e.returned() != *BOOL_TYPE)
         {
             let name = BOOL_TYPE.pretty_print(&eval_args.context.structs);
             let loc = stmt.if_tok.get_loc(&eval_args.file.info);

@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::{
-    lexing::token::{Token, TokenValue}, 
-    parsing::ast::{BinaryExpr, CallExpr, ConstructionArg, ConstructionExpr, Expression, FileNode, UnaryExpr}, 
+    lexing::token::{Token, TokenType, TokenValue}, 
+    parsing::ast::{ArrayLiteral, BinaryExpr, CallExpr, CastExpr, ConstructionArg, ConstructionExpr, Expression, FileNode, UnaryExpr}, 
     utils::{FileInfo, TextLoc, TextPos}, 
     validation::{
         builtins::{BOOL_TYPE, FLOAT_TYPE, INT_TYPE, STRING_TYPE}, defs::var_def::VariableStack, info::{struct_info::StructInfo, types::TypeInfo, FuncResolverResult, InfoContext}, operators::{BinaryOpType, GlobalOperators, UnaryOpType}, TypeError
@@ -23,6 +23,12 @@ pub enum TypedExpression
 {
     Literal
     {
+        returned: TypeInfo,
+        loc: TextLoc,
+    },
+    Array 
+    {
+        expressions: Vec<TypedExpression>,
         returned: TypeInfo,
         loc: TextLoc,
     },
@@ -91,6 +97,7 @@ pub struct ExprCheckArgs<'a>
     pub context: &'a InfoContext,
     pub var_stack: &'a VariableStack,
     pub file: &'a FileNode,
+    pub self_type: Option<&'a TypeInfo>,
 }
 
 impl<'a> ExprCheckArgs<'a>
@@ -120,11 +127,29 @@ impl<'a> ExprCheckArgs<'a>
 
 impl TypedExpression 
 {
-    pub fn check_expr(expr: &Expression, args: ExprCheckArgs) -> Result<TypedExpression, TypeError>
+    pub fn check_expr(expr: &Expression, args: ExprCheckArgs, expected: Option<&TypeInfo>) -> Result<TypedExpression, TypeError>
     {
-        match expr 
+        let gotten = match expr 
         {
             Expression::Literal(token) => {
+                if let TokenType::Null = token.token_type {
+                    let loc = token.get_loc(&args.file.info);
+                    return match expected
+                    {
+                        Some(s) => Ok(TypedExpression::Literal { returned: s.clone(), loc }),
+                        None => Err(TypeError::CannotInferExpression(loc))
+                    }
+                }
+
+                if let TokenType::SelfVal = token.token_type {
+                    let loc = token.get_loc(&args.file.info);
+                    return match args.self_type
+                    {
+                        Some(s) => Ok(TypedExpression::Literal { returned: s.clone(), loc }),
+                        None => Err(TypeError::CannotInferExpression(loc))
+                    }
+                }
+
                 let returned = match token.value.as_ref().unwrap()
                 {
                     TokenValue::String(_) => STRING_TYPE.clone(),
@@ -138,14 +163,51 @@ impl TypedExpression
                     loc: token.get_loc(&args.file.info)
                 })
             },
+            Expression::ArrayLiteral(ArrayLiteral { open_bracket, expressions, close_bracket }) => {
+                let inner_expected = match expected
+                {
+                    Some(TypeInfo::Array(inner)) => Some(&**inner),
+                    None => None,
+                    Some(t) => return Err(TypeError::ExpectedType(t.pretty_print(&args.context.structs), (open_bracket.pos + close_bracket.pos).get_loc(&args.file.info)))
+                };
+
+                let checked = expressions.iter()
+                    .map(|e| Self::check_expr(e, args, inner_expected))
+                    .collect::<Result<Vec<_>, _>>()?;
+
+                for i in 1..checked.len()
+                {
+                    if checked[i].returned() != checked[i - 1].returned()
+                    {
+                        return Err(TypeError::ExpectedType(checked[i - 1].returned().pretty_print(&args.context.structs), expressions[i].get_pos().get_loc(&args.file.info)))
+                    }
+                }
+
+                let loc = (open_bracket.pos + close_bracket.pos).get_loc(&args.file.info);
+                let returned = if checked.len() > 0
+                {
+                    checked[0].returned().clone()
+                }
+                else if expected.is_some()
+                {
+                    expected.unwrap().clone()
+                }
+                else 
+                {
+                    return Err(TypeError::CannotInferExpression(loc));
+                };
+                
+                Ok(TypedExpression::Array { expressions: checked, returned, loc})
+            }
             Expression::Binary(BinaryExpr { left, operator, right }) => {
-                let checked_left = TypedExpression::check_expr(&left, args)?;
-                let checked_right = TypedExpression::check_expr(&right, args)?;
+                let checked_left = TypedExpression::check_expr(&left, args, None)?;
+                let checked_right = TypedExpression::check_expr(&right, args, None)?;
                 let op = BinaryOpType::from_token_type(operator.token_type).expect("Unknown binary operator type");
 
                 match args.operators.evaluate_binary(checked_left.returned(), checked_right.returned(), op)
                 {
                     Some(returned) => {
+
                         Ok(TypedExpression::Binary { 
                             left: Box::new(checked_left), 
                             op, 
@@ -161,13 +223,17 @@ impl TypedExpression
                     }
                 }
             },
+            Expression::Cast(CastExpr { expression, as_tok, type_name }) => {
+                
+            }
             Expression::Unary(UnaryExpr { operator, expression }) => {
-                let expr = TypedExpression::check_expr(&expression, args)?;
+                let expr = TypedExpression::check_expr(&expression, args, expected)?;
                 let op = UnaryOpType::from_token_type(operator.token_type).expect("Unknown unary operator type");
 
                 match args.operators.evaluate_unary(expr.returned(), op)
                 {
                     Some(returned) => {
+
                         Ok(TypedExpression::Unary { 
                             operand: Box::new(expr), 
                             op, 
@@ -181,7 +247,7 @@ impl TypedExpression
                     }
                 }
             },
-            Expression::Construction(ConstructionExpr { type_name, open_brace: _, args: con_args, close_brace }) => {
+            Expression::Construction(ConstructionExpr { type_name, open_brace: _, args: con_args, close_brace }) => { 
                 let type_info = TypeInfo::from(type_name, &args.context.type_resolver, args.file)?;
 
                 let TypeInfo::Primary(id) = type_info else {
@@ -205,12 +271,12 @@ impl TypedExpression
                     TypedIdentifier::Function(id) => args.context.funcs.get(id).unwrap().get_type_info(),
                     TypedIdentifier::Variable(id) => args.var_stack.get_var(id).type_info.clone(),
                 };
-
+                
                 Ok(TypedExpression::Identifier { id: res_id, returned, loc: id.get_loc(&args.file.info) })
             },
             Expression::Call(CallExpr { expression, open_paren, args: call_args, close_paren }) => {
                 let loc = (expression.get_pos() + close_paren.pos).get_loc(&args.file.info);
-                let expr = TypedExpression::check_expr(&expression, args)?;
+                let expr = TypedExpression::check_expr(&expression, args, None)?;
 
                 let throw_error = |infos: Vec<TypeInfo>| -> Result<TypedExpression, TypeError> {
                     let arg_names = infos.into_iter().map(|i| i.pretty_print(&args.context.structs)).collect();
@@ -241,13 +307,7 @@ impl TypedExpression
                             return throw_error(def.parameters.iter().map(|p| p.type_info.clone()).collect());
                         }
 
-                        let a = TypedExpression::check_expr(&call_args[i], args)?;
-
-                        if p.type_info != *a.returned()
-                        {
-                            return throw_error(def.parameters.iter().map(|p| p.type_info.clone()).collect());
-                        }
-
+                        let a = TypedExpression::check_expr(&call_args[i], args, Some(&p.type_info))?;
                         checked_args.push(a);
                     }
                     
@@ -268,8 +328,8 @@ impl TypedExpression
                     return throw_error(fn_args.clone());
                 }
 
-                let call_args = call_args.iter().map(|c| {
-                    TypedExpression::check_expr(c, args)
+                let call_args = call_args.iter().zip(fn_args.iter()).map(|(c, a)| {
+                    TypedExpression::check_expr(c, args, Some(a))
                 }).collect::<Result<Vec<_>, _>>()?;
 
                 if !call_args.iter().zip(fn_args.iter()).all(|(c, f)| {
@@ -289,6 +349,14 @@ impl TypedExpression
                 })
             }
             _ => panic!("This expression has not been implemented yet")
+        };
+
+        match gotten {
+            Ok(ok) => {
+                check_expected(expected, ok.returned(), args, expr.get_pos())?;
+                Ok(ok)
+            }
+            Err(e) => Err(e),
         }
     }
 
@@ -305,6 +373,7 @@ impl TypedExpression
             TypedExpression::Cast { casted: _, type_info: _, returned, loc: _ } => returned,
             TypedExpression::Construction { type_id: _, args: _, returned, loc: _ } => returned,
             TypedExpression::Identifier { id: _, returned, loc: _ } => returned,
+            TypedExpression::Array { expressions: _, returned, loc: _ } => returned,
         }
     }
 
@@ -321,13 +390,25 @@ impl TypedExpression
             TypedExpression::Cast { casted: _, type_info: _, returned: _, loc } => loc,
             TypedExpression::Construction { type_id: _, args: _, returned: _, loc } => loc,
             TypedExpression::Identifier { id: _, returned: _, loc } => loc,
+            TypedExpression::Array { expressions: _, returned: _, loc } => loc,
         }
     }
 }
 
-fn check_construction_args(def: &StructInfo, con_args: &[ConstructionArg], args: ExprCheckArgs, pos: TextPos) -> Result<Vec<(String, TypedExpression)>, TypeError>
+fn check_expected(expected: Option<&TypeInfo>, gotten: &TypeInfo, args: ExprCheckArgs<'_>, pos: TextPos) -> Result<(), TypeError> 
 {
-    let mut members = def.members.iter()
+    if expected.is_some_and(|e| e != gotten)
+    {
+        return Err(TypeError::ExpectedType(expected.unwrap().pretty_print(&args.context.structs), pos.get_loc(&args.file.info)))
+    }
+
+    Ok(())
+}
+
+fn check_construction_args(info: &StructInfo, con_args: &[ConstructionArg], args: ExprCheckArgs, pos: TextPos) -> Result<Vec<(String, TypedExpression)>, TypeError>
+{
+    let members = info.members();
+    let mut members = members.iter()
         .map(|(name, type_info)| (name, (type_info, false)))
         .collect::<HashMap<_, _>>();
 
@@ -345,7 +426,7 @@ fn check_construction_args(def: &StructInfo, con_args: &[ConstructionArg], args:
             return Err(TypeError::InvalidConstructionArgs(con_arg.name.get_loc(&args.file.info)));
         }
 
-        let expr = TypedExpression::check_expr(&con_arg.value, args)?;
+        let expr = TypedExpression::check_expr(&con_arg.value, args, Some(&member.type_info))?;
         if *expr.returned() != member.type_info 
         {
             return Err(TypeError::InvalidConstructionArgs(con_arg.name.get_loc(&args.file.info)));
@@ -356,7 +437,7 @@ fn check_construction_args(def: &StructInfo, con_args: &[ConstructionArg], args:
         expressions.push((name.clone(), expr));
     }
 
-    if !members.values().all(|(mem, init)| *init || mem.init.is_some())
+    if !members.values().all(|(mem, init)| *init || mem.has_init)
     {
         return Err(TypeError::InvalidConstructionArgs(pos.get_loc(&args.file.info)));
     }

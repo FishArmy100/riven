@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use crate::{lexing::token::Token, parsing::ast::{Declaration, FileNode, Program}, utils::FileInfo};
 
-use super::{builtins::{BOOL_ID, BOOL_TYPE_NAME, FLOAT_ID, FLOAT_TYPE_NAME, INT_ID, INT_TYPE_NAME, STRING_ID, STRING_TYPE_NAME, VOID_ID, VOID_TYPE_NAME}, operators::GlobalOperators, type_error::TypeError};
+use super::{builtins::{self, BOOL_ID, BOOL_TYPE_NAME, FLOAT_ID, FLOAT_TYPE_NAME, INT_ID, INT_TYPE_NAME, STRING_ID, STRING_TYPE_NAME, VOID_ID, VOID_TYPE_NAME}, operators::GlobalOperators, type_error::TypeError};
 
 pub struct InfoContext
 {
@@ -60,6 +60,11 @@ impl InfoContext
             }
         }
 
+        for b in builtins::get_builtins()
+        {
+            structs.insert(b.id.clone(), b);
+        }
+
         if errors.len() > 0
         {
             return Err(errors);
@@ -105,12 +110,11 @@ impl TypeResolver
     pub fn new() -> Self 
     {
         let mut map = HashMap::<Vec<String>, HashMap<String, Uuid>>::new();
-        let builtins: &mut HashMap<_, _> = map.entry(vec![]).or_default();
-        builtins.insert(INT_TYPE_NAME.to_string(),      *INT_ID);
-        builtins.insert(FLOAT_TYPE_NAME.to_string(),    *FLOAT_ID);
-        builtins.insert(BOOL_TYPE_NAME.to_string(),     *BOOL_ID);
-        builtins.insert(STRING_TYPE_NAME.to_string(),   *STRING_ID);
-        builtins.insert(VOID_TYPE_NAME.to_string(),     *VOID_ID);
+        let bins: &mut HashMap<_, _> = map.entry(vec![]).or_default();
+        for b in builtins::get_builtins()
+        {
+            bins.insert(b.name, b.id);
+        }
         
         TypeResolver { map }
     }

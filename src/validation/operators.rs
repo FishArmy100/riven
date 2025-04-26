@@ -7,6 +7,7 @@ pub struct GlobalOperators
 {
     binary_ops: HashMap<BinaryOpType, Vec<BinaryOp>>,
     unary_ops: HashMap<UnaryOpType, Vec<UnaryOp>>,
+    cast_ops: HashMap<TypeInfo, Vec<CastOp>>
 }
 
 impl GlobalOperators
@@ -17,6 +18,7 @@ impl GlobalOperators
         {
             binary_ops: HashMap::new(),
             unary_ops: HashMap::new(),
+            cast_ops: HashMap::new(),
         }
     }
 
@@ -48,6 +50,28 @@ impl GlobalOperators
         };
 
         ops.iter().find(|o| o.input == *input).map(|o| o.result.clone())
+    }
+
+    pub fn add_cast_op(&mut self, op: CastOp)
+    {
+        let ops = self.cast_ops.entry(op.caster.clone()).or_default();
+        ops.push(op);
+    }
+
+    pub fn evaluate_cast(&self, value_type: &TypeInfo, cast_type: &TypeInfo) -> Option<TypeInfo>
+    {
+        let Some(ops) = self.cast_ops.get(&cast_type) else {
+            return None;
+        };
+
+        if ops.iter().any(|o| (o.checker)(value_type))
+        {
+            Some(cast_type.clone())
+        }
+        else 
+        {
+            None
+        }
     }
 }
 
@@ -185,4 +209,23 @@ pub struct UnaryOp
     pub op: UnaryOpType,
     pub input: TypeInfo,
     pub result: TypeInfo
+}
+
+pub struct CastOp
+{
+    pub checker: Box<dyn Fn(&TypeInfo) -> bool>,
+    pub caster: TypeInfo // value as This
+}
+
+impl CastOp
+{
+    pub fn simple(castee: TypeInfo, type_to_cast_to: TypeInfo) -> Self 
+    {
+        let checker = Box::new(move |a: &TypeInfo| -> bool { *a == castee });
+        Self 
+        {
+            checker,
+            caster: type_to_cast_to,
+        }
+    }
 }

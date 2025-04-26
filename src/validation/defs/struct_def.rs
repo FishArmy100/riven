@@ -1,6 +1,8 @@
+use std::sync::Arc;
+
 use uuid::Uuid;
 
-use crate::{parsing::ast::FileNode, validation::{ast::{ExprCheckArgs, TypedExpression}, info::{struct_info::StructInfo, types::TypeInfo, InfoContext}, operators::GlobalOperators, type_error::TypeError}};
+use crate::{parsing::ast::FileNode, validation::{ast::{ExprCheckArgs, TypedExpression}, info::{struct_info::{StructDeclData, StructInfo}, types::TypeInfo, InfoContext}, operators::GlobalOperators, type_error::TypeError}};
 
 use super::var_def::VariableStack;
 
@@ -13,12 +15,12 @@ pub struct StructDef
     pub members: Vec<TypeDefMember>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TypeDefMember
 {
     pub name: String,
     pub type_info: TypeInfo,
-    pub init: Option<Box<TypedExpression>>,
+    pub init: Option<Arc<TypedExpression>>,
 }
 
 impl StructDef
@@ -27,20 +29,34 @@ impl StructDef
     {
         let var_stack = VariableStack::new();
 
+        let (_, file, s_members) = match &info.decl_data
+        {
+            StructDeclData::Decl { decl, file, members: s_members } => (decl, file, s_members),
+            StructDeclData::Builtin { members } => {
+                return Ok(Self { 
+                    id: info.id.clone(), 
+                    name: info.name.clone(), 
+                    is_pub: info.is_pub, 
+                    members: members.clone(),
+                })
+            },
+        };
+
         let check_args = ExprCheckArgs {
             operators,
             context,
             var_stack: &var_stack,
-            file: &info.file
+            file: &file,
+            self_type: None,
         };
 
         let mut errors = vec![];
         let mut members = vec![];
 
-        for (name, member) in &info.members
+        for (name, member) in s_members
         {
             let init = if let Some(init) = &member.init {
-                let checked_init = match TypedExpression::check_expr(init, check_args) {
+                let checked_init = match TypedExpression::check_expr(init, check_args, Some(&member.type_info)) {
                     Ok(ok) => ok,
                     Err(e) => {
                         errors.push(e);
@@ -54,7 +70,7 @@ impl StructDef
                     continue;
                 }
 
-                Some(Box::new(checked_init))
+                Some(Arc::new(checked_init))
 
             } else { None };
 

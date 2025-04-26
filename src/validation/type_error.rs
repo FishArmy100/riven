@@ -25,6 +25,9 @@ pub enum TypeError
     ExpectedAnIterator(TextLoc),
     UnknownVariable(String, TextLoc),
     FunctionMustReturn(TextLoc),
+    CannotInferExpression(TextLoc),
+    CannotDefineParentTypeTwice(TextLoc),
+    CannotUseSelfInContext(TextLoc),
 }
 
 impl CompilerError for TypeError
@@ -51,6 +54,9 @@ impl CompilerError for TypeError
             TypeError::ExpectedAnIterator(_) => format!("Expected an iterator"),
             TypeError::UnknownVariable(name, _) => format!("Unknown variable {}", name),
             TypeError::FunctionMustReturn(_) => format!("Function must return"),
+            TypeError::CannotInferExpression(_) => format!("Cannot infer expression type"),
+            TypeError::CannotDefineParentTypeTwice(_) => format!("Cannot define parent type multiple times"),
+            TypeError::CannotUseSelfInContext(_) => format!("Cannot use `self`, in this context"),
         }
     }
 
@@ -76,6 +82,9 @@ impl CompilerError for TypeError
             TypeError::ExpectedAnIterator(loc) => loc.clone(),
             TypeError::UnknownVariable(_, loc) => loc.clone(),
             TypeError::FunctionMustReturn(loc) => loc.clone(),
+            TypeError::CannotInferExpression(loc) => loc.clone(),
+            TypeError::CannotDefineParentTypeTwice(loc) => loc.clone(),
+            TypeError::CannotUseSelfInContext(loc) => loc.clone(),
         }
     }
 }

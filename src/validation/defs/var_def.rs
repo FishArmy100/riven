@@ -18,25 +18,23 @@ impl VarDef
     pub fn from_let(let_stmt: &LetStmt, args: ExprCheckArgs) -> Result<Self, TypeError>
     {
         let name = let_stmt.id.value_string().unwrap().clone();
-        let initializer = TypedExpression::check_expr(&let_stmt.expression, args)?;
         let id = Uuid::new_v4();
-        let type_info = if let Some((_, t)) = &let_stmt.type_name 
+        let mut type_info = if let Some((_, t)) = &let_stmt.type_name 
         {
             let type_info = TypeInfo::from(t, &args.context.type_resolver, args.file)?;
-            if type_info != *initializer.returned()
-            {
-                let name = type_info.pretty_print(&args.context.structs);
-                let loc = let_stmt.expression.get_pos().get_loc(&args.file.info);
-                return Err(TypeError::ExpectedType(name, loc));
-            }
-
-            type_info
-        } else { initializer.returned().clone() };
+            Some(type_info)
+        } else { None };
+        
+        let initializer = TypedExpression::check_expr(&let_stmt.expression, args, type_info.as_ref())?;
+        if type_info.is_none()
+        {
+            type_info = Some(initializer.returned().clone())
+        }
 
         Ok(Self {
             id,
             name,
-            type_info,
+            type_info: type_info.unwrap(),
             initializer: Some(initializer),
         })
     }

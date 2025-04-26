@@ -1,6 +1,0 @@
-use src.test;
-
-fn test_a()
-{
-    let b = build(5);
-}

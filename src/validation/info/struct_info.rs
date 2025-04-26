@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use uuid::Uuid;
 
-use crate::{parsing::ast::{Declaration, Expression, FileNode, StructDecl, StructDeclMember}, validation::type_error::TypeError};
+use crate::{parsing::ast::{Declaration, Expression, FileNode, StructDecl, StructDeclMember}, validation::{defs::struct_def::TypeDefMember, type_error::TypeError}};
 
 use super::{types::TypeInfo, TypeResolver};
 
@@ -13,10 +13,11 @@ pub enum StructDeclData
     {
         decl: Arc<StructDecl>,
         file: Arc<FileNode>,
+        members: HashMap<String, StructMember>,
     },
     Builtin 
     {
-        members: Vec<StructDeclMember>
+        members: Vec<TypeDefMember>
     }
 }
 
@@ -25,9 +26,15 @@ pub struct StructInfo
 {
     pub id: Uuid,
     pub name: String,
-    pub members: HashMap<String, StructMember>,
     pub is_pub: bool,
     pub decl_data: StructDeclData,
+}
+
+pub struct MemberInfo
+{
+    pub name: String,
+    pub type_info: TypeInfo,
+    pub has_init: bool,
 }
 
 impl StructInfo
@@ -77,14 +84,33 @@ impl StructInfo
 
         Ok(StructInfo { 
             id, 
-            name, 
-            members: members.into_iter()
-                .map(|m| (m.name.clone(), m))
-                .collect(),
+            name,
             is_pub: decl.pub_tok.is_some(),
-            decl,
-            file,
+            decl_data: StructDeclData::Decl { 
+                decl, 
+                file,
+                members: members.into_iter()
+                    .map(|m| (m.name.clone(), m))
+                    .collect() 
+            }
         })
+    }
+
+    pub fn members(&self) -> HashMap<String, MemberInfo>
+    {
+        match &self.decl_data
+        {
+            StructDeclData::Decl { decl: _, file: _, members } => members.iter().map(|(n, m)| (n.clone(), MemberInfo {
+                name: n.clone(),
+                type_info: m.type_info.clone(),
+                has_init: m.init.is_some(),
+            })).collect(),
+            StructDeclData::Builtin { members } => members.iter().map(|m| (m.name.clone(), MemberInfo {
+                name: m.name.clone(),
+                type_info: m.type_info.clone(),
+                has_init: m.init.is_some(),
+            })).collect(),
+        }
     }
 }
 

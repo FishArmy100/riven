@@ -1,8 +1,8 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use uuid::Uuid;
 
-use crate::{parsing::ast::FileNode, validation::{ast::{stmt::{StmtCheckArgs, TypedStatement}, ExprCheckArgs, TypedExpression}, builtins::VOID_TYPE, defs::var_def::VariableStack, info::{func_info::FuncInfo, types::TypeInfo, InfoContext}, operators::GlobalOperators, type_error::TypeError}};
+use crate::{parsing::ast::FileNode, validation::{ast::{stmt::{StmtCheckArgs, TypedStatement}, ExprCheckArgs, TypedExpression}, builtins::VOID_TYPE, defs::var_def::VariableStack, info::{func_info::{FuncDeclData, FuncInfo}, types::TypeInfo, InfoContext}, operators::GlobalOperators, type_error::TypeError}};
 
 use super::var_def::VarDef;
 
@@ -14,15 +14,15 @@ pub struct FuncDef
     pub is_pub: bool,
     pub returned: TypeInfo,
     pub params: Vec<FuncDefParam>,
-    pub body: FuncDefBody
+    pub body: Option<FuncDefBody>
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FuncDefParam
 {
     pub name: String,
     pub type_info: TypeInfo,
-    pub init: Option<Box<TypedExpression>>,
+    pub init: Option<Arc<TypedExpression>>,
 }
 
 #[derive(Debug)]
@@ -41,17 +41,33 @@ impl FuncDef
 
         let var_stack = VariableStack::new();
 
+        let (decl, file) = match &info.decl_data
+        {
+            FuncDeclData::Decl { decl, file } => (decl, file),
+            FuncDeclData::Builtin { params } => {
+                return Ok(Self { 
+                    id: info.id.clone(), 
+                    name: info.name.clone(), 
+                    is_pub: info.is_pub, 
+                    returned: info.returned.clone(), 
+                    params: params.clone(), 
+                    body: None 
+                })
+            },
+        };
+
         let check_args = ExprCheckArgs {
             operators,
             context,
             var_stack: &var_stack,
-            file: &info.file
+            file: &file,
+            self_type: info.parent.as_ref()
         };
 
         for param in &info.parameters
         {
             let init = if let Some(init) = &param.init {
-                let checked_init = match TypedExpression::check_expr(init, check_args) {
+                let checked_init = match TypedExpression::check_expr(init, check_args, Some(&param.type_info)) {
                     Ok(ok) => ok,
                     Err(e) => {
                         errors.push(e);
@@ -65,7 +81,7 @@ impl FuncDef
                     continue;
                 }
 
-                Some(Box::new(checked_init))
+                Some(Arc::new(checked_init))
 
             } else { None };
 
@@ -80,11 +96,13 @@ impl FuncDef
         let mut stmt_check_args = StmtCheckArgs {
             operators,
             context,
-            file: &info.file,
+            file: &file,
             var_stack: &mut body_var_stack,
+            fn_ret_type: Some(&info.returned),
+            self_type: info.parent.as_ref(),
         };
 
-        let body = match TypedStatement::check_block(&info.decl.body, &mut stmt_check_args){
+        let body = match TypedStatement::check_block(&decl.body, &mut stmt_check_args){
             Ok(ok) => {
                 let returns = ok.check_return(&info.returned, &stmt_check_args);
                 match returns
@@ -92,7 +110,7 @@ impl FuncDef
                     Ok(returns) => {
                         if !returns && info.returned != *VOID_TYPE
                         {
-                            errors.push(TypeError::FunctionMustReturn(info.decl.fn_tok.get_loc(&info.file.info)));
+                            errors.push(TypeError::FunctionMustReturn(decl.fn_tok.get_loc(&file.info)));
                         }
                     },
                     Err(err) => errors.extend(err),
@@ -121,7 +139,7 @@ impl FuncDef
             name: info.name.clone(), 
             is_pub: info.is_pub, 
             params, 
-            body: body.unwrap() ,
+            body: Some(body.unwrap()),
             returned: info.returned.clone()
         })
     }
