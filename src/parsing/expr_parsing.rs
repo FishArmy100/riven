@@ -260,7 +260,7 @@ fn parse_construction_expression(reader: &mut TokenReader) -> ParserResult<Optio
 
 fn parse_type_value(reader: &mut TokenReader) -> ParserResult<Option<Expression>>
 {
-    if let Some(offset) = is_type(reader)
+    if let Some(offset) = is_type_and(reader, |t| !t.is_identifier())
     {
         if reader.peek_is(offset, TokenType::Dot)
         {

@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::{
     lexing::token::{Token, TokenType, TokenValue}, 
-    parsing::ast::{ArrayLiteral, BinaryExpr, CallExpr, CastExpr, ConstructionArg, ConstructionExpr, Expression, FileNode, IndexExpr, LambdaExpr, LambdaParams, UnaryExpr}, 
+    parsing::ast::{AccessExpr, ArrayLiteral, BinaryExpr, CallExpr, CastExpr, ConstructionArg, ConstructionExpr, Expression, FileNode, IndexExpr, LambdaExpr, LambdaParams, UnaryExpr}, 
     utils::{FileInfo, Shared, TextLoc, TextPos}, 
     validation::{
         builtins::{BOOL_TYPE, FLOAT_TYPE, INT_TYPE, STRING_TYPE, VOID_TYPE}, defs::var_def::VariableStack, info::{struct_info::StructInfo, types::TypeInfo, FuncResolverResult, InfoContext}, operators::{BinaryOpType, GlobalOperators, UnaryOpType}, TypeError
@@ -339,7 +339,28 @@ impl TypedExpression
                     returned, 
                     loc 
                 })
-            }
+            },
+            Expression::Access(AccessExpr { expression, dot, identifier }) => {
+                let expr = TypedExpression::check_expr(&expression, args, None)?;
+                let name = identifier.value_string().unwrap().clone();
+
+                let loc = (expression.get_pos() + identifier.pos).get_loc(&args.file.info);
+                
+                match eval_access(expr.returned(), &name, args)
+                {
+                    Some(returned) => Ok(TypedExpression::Access { 
+                        accessed: Box::new(expr), 
+                        name, 
+                        returned, 
+                        loc
+                    }),
+                    None => Err(TypeError::NoMember { 
+                        type_name: expr.returned().pretty_print(&args.context.structs), 
+                        member: name.clone(), 
+                        loc
+                    })
+                }
+            },
             Expression::Unary(UnaryExpr { operator, expression }) => {
                 let expr = TypedExpression::check_expr(&expression, args, expected)?;
                 let op = UnaryOpType::from_token_type(operator.token_type).expect("Unknown unary operator type");
@@ -573,4 +594,17 @@ fn check_construction_args(info: &StructInfo, con_args: &[ConstructionArg], args
     }
 
     Ok(expressions)
+}
+
+fn eval_access(assigned: &TypeInfo, name: &String, args: &ExprCheckArgs) -> Option<TypeInfo>
+{
+    let TypeInfo::Primary(id) = assigned else {
+        return None;
+    };
+
+    args.context.structs.get(id)
+        .unwrap()
+        .members()
+        .get(name)
+        .map(|m| m.type_info.clone())
 }
