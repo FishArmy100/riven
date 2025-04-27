@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use func_info::FuncInfo;
 use itertools::Itertools;
 use struct_info::StructInfo;
+use types::TypeInfo;
 use uuid::Uuid;
 
 use crate::{lexing::token::Token, parsing::ast::{Declaration, FileNode, Program}, utils::FileInfo};
@@ -18,6 +19,7 @@ pub struct InfoContext
     pub structs: HashMap<Uuid, StructInfo>,
     pub func_resolver: FuncResolver,
     pub funcs: HashMap<Uuid, FuncInfo>,
+    pub member_funcs: HashMap<(TypeInfo, String), FuncInfo>,
 }
 
 impl InfoContext
@@ -74,6 +76,7 @@ impl InfoContext
             structs, 
             func_resolver, 
             funcs,
+            member_funcs: HashMap::new()
         })
     }
 }

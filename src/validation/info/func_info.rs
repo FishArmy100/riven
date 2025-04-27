@@ -36,7 +36,7 @@ pub struct FuncInfo
     pub name: String,
     pub parent: Option<TypeInfo>,
     pub has_self: bool,
-    pub parameters: Vec<FuncInfoParam>,
+    pub parameters: Vec<FuncInfoParam>, 
     pub returned: TypeInfo,
     pub is_pub: bool,
     pub decl_data: FuncDeclData,
