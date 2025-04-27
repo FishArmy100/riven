@@ -1,6 +1,11 @@
 
+struct Number
+{
+    i: Int = 1,
+}
+
 fn main()
 {
-    let array = [5, 6, 7];
-    array[1] = 0;
+    let number = Number {};
+    let i = number.i;
 }

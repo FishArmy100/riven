@@ -1,6 +1,6 @@
 use itertools::Itertools;
 
-use crate::{compiler::CompilerError, lexing::token::Token, utils::TextLoc};
+use crate::{compiler::CompilerError, lexing::token::Token, parsing::ast::TypeName, utils::TextLoc};
 
 use super::operators::{BinaryOpType, UnaryOpType};
 
@@ -44,7 +44,13 @@ pub enum TypeError
     ExpressionNotAssignable(TextLoc),
     DuplicateMainFn(TextLoc),
     NoMainFn,
-    InvalidMainArgs(TextLoc)
+    InvalidMainArgs(TextLoc),
+    NoMember
+    {
+        type_name: String,
+        member: String,
+        loc: TextLoc,
+    }
 }
 
 impl CompilerError for TypeError
@@ -81,6 +87,7 @@ impl CompilerError for TypeError
             TypeError::DuplicateMainFn(_) => format!("Duplicate main function found"),
             TypeError::NoMainFn => format!("No main function found"),
             TypeError::InvalidMainArgs(_) => format!("Invalid main args"),
+            TypeError::NoMember { type_name, member, loc: _ } => format!("No member {} on type {}", member, type_name),
         }
     }
 
@@ -116,6 +123,7 @@ impl CompilerError for TypeError
             TypeError::DuplicateMainFn(text_loc) => Some(text_loc.clone()),
             TypeError::NoMainFn => None,
             TypeError::InvalidMainArgs(text_loc) => Some(text_loc.clone()),
+            TypeError::NoMember { type_name: _, member: _, loc } => Some(loc.clone()),
         }
     }
 }

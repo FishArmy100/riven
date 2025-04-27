@@ -88,6 +88,15 @@ impl TypeName
             },
         }
     }
+
+    pub fn is_identifier(&self) -> bool 
+    {
+        match self 
+        {
+            TypeName::Identifier(_) => true,
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
