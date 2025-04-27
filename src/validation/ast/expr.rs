@@ -84,6 +84,14 @@ pub enum TypedExpression
         returned: TypeInfo,
         loc: TextLoc,
     },
+    TypeAccess
+    {
+        accessed: Box<TypeInfo>,
+        name: String,
+        func_id: Uuid,
+        returned: TypeInfo,
+        loc: TextLoc,
+    },
     Cast
     {
         casted: Box<TypedExpression>,
@@ -120,7 +128,7 @@ impl<'a> ExprCheckArgs<'a>
             return Ok(TypedIdentifier::Variable(var));
         }
         
-        match self.context.func_resolver.resolve(token, self.file)
+        match self.context.func_resolver.resolve(None, token, self.file)
         {
             FuncResolverResult::ConflictingFuncs(token) => {
                 return Err(TypeError::ConflictingFunctions(token.clone(), token.get_loc(&self.file.info)));
@@ -340,7 +348,7 @@ impl TypedExpression
                     loc 
                 })
             },
-            Expression::Access(AccessExpr { expression, dot, identifier }) => {
+            Expression::Access(AccessExpr { expression, dot: _, identifier }) => {
                 let expr = TypedExpression::check_expr(&expression, args, None)?;
                 let name = identifier.value_string().unwrap().clone();
 
@@ -524,6 +532,7 @@ impl TypedExpression
             TypedExpression::Identifier { id: _, returned, loc: _ } => returned,
             TypedExpression::Array { expressions: _, returned, loc: _ } => returned,
             TypedExpression::Lambda { parameters: _, body: _, returned, loc: _ } => returned,
+            TypedExpression::TypeAccess { accessed: _, name: _, func_id: _, returned, loc: _ } => returned,
         }
     }
 
@@ -542,6 +551,7 @@ impl TypedExpression
             TypedExpression::Identifier { id: _, returned: _, loc } => loc,
             TypedExpression::Array { expressions: _, returned: _, loc } => loc,
             TypedExpression::Lambda { parameters: _, body: _, returned: _, loc } => loc,
+            TypedExpression::TypeAccess { accessed: _, name: _, func_id: _, returned: _, loc } => loc,
         }
     }
 }

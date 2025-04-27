@@ -19,7 +19,6 @@ pub struct InfoContext
     pub structs: HashMap<Uuid, StructInfo>,
     pub func_resolver: FuncResolver,
     pub funcs: HashMap<Uuid, FuncInfo>,
-    pub member_funcs: HashMap<(TypeInfo, String), FuncInfo>,
 }
 
 impl InfoContext
@@ -37,7 +36,11 @@ impl InfoContext
             {
                 errors.extend(e);
             }
-            if let Err(e) = func_resolver.append_file(file)
+        }
+
+        for file in &program.files
+        {
+            if let Err(e) = func_resolver.append_file(file, &type_resolver)
             {
                 errors.extend(e);
             }
@@ -76,7 +79,6 @@ impl InfoContext
             structs, 
             func_resolver, 
             funcs,
-            member_funcs: HashMap::new()
         })
     }
 }
@@ -102,6 +104,7 @@ impl TypeResolverResult
     }
 }
 
+#[derive(Debug)]
 pub struct TypeResolver
 {
     map: HashMap<Vec<String>, HashMap<String, Uuid>>,
@@ -204,9 +207,10 @@ impl FuncResolverResult
     }
 }
 
+#[derive(Debug)]
 pub struct FuncResolver
 {
-    map: HashMap<Vec<String>, HashMap<String, Uuid>>,
+    map: HashMap<Vec<String>, HashMap<(Option<TypeInfo>, String), Uuid>>,
 }
 
 impl FuncResolver
@@ -216,7 +220,7 @@ impl FuncResolver
         Self { map: HashMap::new() }
     }
 
-    pub fn append_file(&mut self, file: &FileNode) -> Result<(), Vec<TypeError>>
+    pub fn append_file(&mut self, file: &FileNode, type_resolver: &TypeResolver) -> Result<(), Vec<TypeError>>
     {
         let mut errors = vec![];
 
@@ -225,13 +229,25 @@ impl FuncResolver
         {
             if let Declaration::Fn(f) = decl {
                 let name = f.id.value_string().unwrap().clone();
-                if file_types.contains_key(&name)
+                
+                let parent_type = match f.type_name.as_ref().map(|(_, r)| r)
+                {
+                    Some(t) => match TypeInfo::from(&t, type_resolver, file)
+                    {
+                        Ok(ok) => Some(ok),
+                        Err(err) => return Err(vec![err])
+                    },
+                    None => None
+                };
+
+
+                if file_types.contains_key(&(parent_type.clone(), name.clone()))
                 {
                     errors.push(TypeError::DuplicateTypeDef(f.id.clone(), f.id.get_loc(&file.info)));
                 }
                 else 
                 {
-                    file_types.insert(name, Uuid::new_v4());
+                    file_types.insert((parent_type, name), Uuid::new_v4());
                 }
             }
         }
@@ -244,12 +260,12 @@ impl FuncResolver
         Ok(())
     }
 
-    pub fn resolve(&self, token: &Token, file: &FileNode) -> FuncResolverResult
+    pub fn resolve(&self, type_info: Option<TypeInfo>, token: &Token, file: &FileNode) -> FuncResolverResult
     {
         let name = token.value_string().unwrap();
         let possible = file.using_paths.iter()
             .filter_map(|u| self.map.get(u))
-            .filter_map(|file| file.get(name))
+            .filter_map(|file| file.get(&(type_info.clone(), name.clone())))
             .collect_vec();
 
         
@@ -267,13 +283,13 @@ impl FuncResolver
         }
     }
 
-    pub fn resolve_result(&self, token: &Token, file: &FileNode) -> Result<Uuid, TypeError>
+    pub fn resolve_result(&self, parent_type: Option<TypeInfo>, token: &Token, file: &FileNode) -> Result<Uuid, TypeError>
     {
-        self.resolve(token, file).to_result(&file.info)
+        self.resolve(parent_type, token, file).to_result(&file.info)
     }
 
-    pub fn get_func_id(&self, path: &[String], name: &String) -> Option<Uuid>
+    pub fn get_func_id(&self, path: &[String], parent_type: Option<TypeInfo>, name: String) -> Option<Uuid>
     {
-        self.map.get(path).map(|d| d.get(name).cloned()).flatten()
+        self.map.get(path).map(|d| d.get(&(parent_type, name)).cloned()).flatten()
     }
 }

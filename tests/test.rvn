@@ -1,11 +1,12 @@
 
-struct Number
+struct Math {}
+
+fn Math.add(a: Int, b: Int) -> Int 
 {
-    i: Int = 1,
+    return a + b;
 }
 
 fn main()
 {
-    let number = Number {};
-    let i = number.i;
+    Math.add(5, 6);
 }

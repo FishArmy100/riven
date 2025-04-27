@@ -72,7 +72,13 @@ impl FuncInfo
     pub fn new(decl: Arc<FnDecl>, resolver: &TypeResolver, func_resolver: &FuncResolver, file: Arc<FileNode>) -> Result<Self, TypeError>
     {
         let name = decl.id.value_string().unwrap().clone();
-        let fn_id = func_resolver.get_func_id(&file.info.path.split_relative(), &name).unwrap();
+        let parent_type =  match &decl.type_name 
+        {
+            Some((_, t)) => Some(TypeInfo::from(t, resolver, &file)?),
+            None => None,
+        };
+
+        let fn_id = func_resolver.get_func_id(&file.info.path.split_relative(), parent_type, name.clone()).unwrap();
 
         let parent = decl.type_name.as_ref().map(|(_, t)| TypeInfo::from(t, resolver, &file));
         if let Some(Err(e)) = parent {
