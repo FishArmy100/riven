@@ -1,3 +1,5 @@
+use std::fmt::format;
+
 use itertools::Itertools;
 
 #[derive(Debug)]
@@ -139,23 +141,65 @@ pub enum LuaExpr
         args: Vec<String>,
         body: Vec<LuaStmt>,
     },
+    Map
+    {
+        members: Vec<(String, LuaExpr)>
+    }
 }
 
 impl LuaExpr
 {
-    pub fn to_string(&self, args: &mut LuaFormatArgs) -> String
+    pub fn to_string(&self, format_args: &mut LuaFormatArgs) -> String
     {
-        0
+        match self 
+        {
+            LuaExpr::Id(id) => id.clone(),
+            LuaExpr::Literal(lua_lit) => lua_lit.to_string(),
+            LuaExpr::Binary { left, op, right } => format!("({} {} {})", left.to_string(format_args), op, right.to_string(format_args)),
+            LuaExpr::Unary { expr, op } => format!("({}{})", op, expr.to_string(format_args)),
+            LuaExpr::Index { expr, arg } => format!("{}[{}]", expr.to_string(format_args), arg.to_string(format_args)),
+            LuaExpr::Call { expr, args } => {
+                let args = args.iter().map(|a| a.to_string(format_args)).join(", ");
+                let expr = expr.to_string(format_args);
+                format!("{}({})", expr, args)
+            },
+            LuaExpr::FuncDef { args, body } => {
+                let mut str = format!("function({})\n", args.iter().join(", "));
+                format_args.indent += 1;
+                for s in body.iter()
+                {
+                    str += &s.to_string(format_args);
+                }
+                format_args.indent -= 1;
+                str += &format!("{}end", format_args.get_tab());
+                str
+            },
+            LuaExpr::Map { members } => {
+                let mut str = "{".to_string();
+                format_args.indent += 1;
+                for (name, expr) in members.iter()
+                {
+                    str += &format!("{}{} = {},\n", format_args.get_tab(), name, expr.to_string(format_args));
+                }
+                format_args.indent -= 1;
+                str += &format!("{}}}", format_args.get_tab());
+                str
+            },
+        }
     }
 }
 
 #[derive(Debug)]
 pub enum LuaStmt
 {
-    Empty,
     Block
     {
         stmts: Vec<LuaStmt>,
+    },
+    Call 
+    {
+        expr: Box<LuaExpr>,
+        args: Vec<LuaExpr>,
     },
     Assign
     {
@@ -181,5 +225,72 @@ pub enum LuaStmt
     Goto
     {
         label: String,
+    },
+    Return(Option<Box<LuaExpr>>),
+    Break,
+}
+
+impl LuaStmt
+{
+    pub fn to_string(&self, fmt_args: &mut LuaFormatArgs) -> String 
+    {
+        match self 
+        {
+            LuaStmt::Block { stmts } => {
+                let mut str = format!("{}do\n", fmt_args.get_tab());
+                fmt_args.indent += 1;
+                for s in stmts
+                {
+                    str += &s.to_string(fmt_args);
+                }
+                fmt_args.indent -= 1;
+                str += &format!("{}end\n", fmt_args.get_tab());
+                str
+            },
+            LuaStmt::Assign { pairs } => {
+                let ids = pairs.iter().map(|i| i.0.clone()).join(", ");
+                let vals = pairs.iter().map(|v| v.1.to_string(fmt_args)).join(", ");
+                format!("{}{} = {}\n", fmt_args.get_tab(), ids, vals)
+            },
+            LuaStmt::LocalDecl { pairs } => {
+                let ids = pairs.iter().map(|i| i.0.clone()).join(", ");
+                let vals = pairs.iter().map(|v| v.1.to_string(fmt_args)).join(", ");
+                format!("{}local {} = {}\n", fmt_args.get_tab(), ids, vals)
+            },
+            LuaStmt::While { cond, stmts } => {
+                let mut str = format!("{}while {}\n", fmt_args.get_tab(), cond.to_string(fmt_args));
+                fmt_args.indent += 1;
+                for s in stmts
+                {
+                    str += &s.to_string(fmt_args);
+                }
+                fmt_args.indent -= 1;
+                str += &format!("{}end\n", fmt_args.get_tab());
+                str
+            },
+            LuaStmt::FuncDef { name, args, body } => {
+                let mut str = format!("function {}({})\n", name, args.iter().join(", "));
+                fmt_args.indent += 1;
+                for s in body.iter()
+                {
+                    str += &s.to_string(fmt_args);
+                }
+                fmt_args.indent -= 1;
+                str += &format!("{}end", fmt_args.get_tab());
+                str
+            },
+            LuaStmt::Label(l) => format!("{}::{}::\n", fmt_args.get_tab(), l),
+            LuaStmt::Goto { label } => format!("{}goto {}", fmt_args.get_tab(), label),
+            LuaStmt::Return(lua_expr) => match lua_expr {
+                Some(expr) => format!("{}return {}", fmt_args.get_tab(), expr.to_string(fmt_args)),
+                None => format!("{}return\n", fmt_args.get_tab()),
+            },
+            LuaStmt::Break => format!("{}break\n", fmt_args.get_tab()),
+            LuaStmt::Call { expr, args } => {
+                let args = args.iter().map(|a| a.to_string(fmt_args)).join(", ");
+                let expr = expr.to_string(fmt_args);
+                format!("{}({})\n", expr, args)
+            },
+        }
     }
 }
