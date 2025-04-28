@@ -1,12 +1,8 @@
 
-struct Math {}
 
-fn Math.add(a: Int, b: Int) -> Int 
-{
-    return a + b;
-}
 
 fn main()
 {
-    Math.add(5, 6);
+    let str = "5";
+    let i: ?Int = str.to_int();
 }

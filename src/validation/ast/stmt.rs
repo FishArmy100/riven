@@ -14,6 +14,7 @@ pub struct StmtCheckArgs<'a>
     pub var_stack: Shared<VariableStack>,
     pub fn_ret_type: Option<&'a TypeInfo>,
     pub self_type: Option<&'a TypeInfo>,
+    pub loop_stack: Shared<u32>,
 }
 
 impl<'a> StmtCheckArgs<'a>
@@ -26,7 +27,8 @@ impl<'a> StmtCheckArgs<'a>
             var_stack: self.var_stack.clone(), 
             file: self.file, 
             self_type: self.self_type,
-            fn_ret_type: self.fn_ret_type
+            fn_ret_type: self.fn_ret_type,
+            loop_stack: self.loop_stack.clone(),
         }
     }
 }
@@ -104,13 +106,14 @@ impl TypedStatement
                     }
                 };
                 
-                if !condition.as_ref().is_some_and(|e| *e.returned() != *BOOL_TYPE)
+                if condition.as_ref().is_some_and(|e| *e.returned() != *BOOL_TYPE)
                 {
                     let name = BOOL_TYPE.pretty_print(&eval_args.context.structs);
                     let loc = while_stmt.while_tok.get_loc(&eval_args.file.info);
                     errors.push(TypeError::ExpectedType(name, loc));
                 }
 
+                *eval_args.loop_stack.get_mut() += 1;
                 let body = match Self::check_block(&while_stmt.body, eval_args) {
                     Ok(ok) => Some(ok),
                     Err(errs) => {
@@ -118,6 +121,7 @@ impl TypedStatement
                         None
                     }
                 };
+                *eval_args.loop_stack.get_mut() -= 1;
                 
                 if errors.len() > 0
                 {
@@ -152,6 +156,7 @@ impl TypedStatement
                 let var_id = Uuid::new_v4();
                 eval_args.var_stack.get_mut().add_var(var_name, var_type, var_id);
 
+                *eval_args.loop_stack.get_mut() += 1;
                 let body = match Self::check_block(&for_stmt.body, eval_args) {
                     Ok(ok) => Some(ok),
                     Err(errs) => {
@@ -159,6 +164,7 @@ impl TypedStatement
                         None
                     }
                 };
+                *eval_args.loop_stack.get_mut() -= 1;
                 
                 if errors.len() > 0
                 {
@@ -190,11 +196,21 @@ impl TypedStatement
                     Err(err) => Err(vec![err]),
                 }
             },
-            Statement::Continue(_) => {
-                return Ok(TypedStatement::Continue);
+            Statement::Continue(c) => {
+                if *eval_args.loop_stack.get() == 0
+                {
+                    return Err(vec![TypeError::BreakContinueInvalidSpot(c.continue_tok.get_loc(&eval_args.file.info))])
+                }
+
+                Ok(TypedStatement::Continue)
             },
-            Statement::Break(_) => {
-                return Ok(TypedStatement::Break)
+            Statement::Break(b) => {
+                if *eval_args.loop_stack.get() == 0
+                {
+                    return Err(vec![TypeError::BreakContinueInvalidSpot(b.break_tok.get_loc(&eval_args.file.info))])
+                }
+
+                Ok(TypedStatement::Break)
             },
             Statement::Assign(assign_stmt) => {
                 let assigned_expr = match TypedExpression::check_expr(&assign_stmt.assigned, &eval_args.expr_check_args(), None) {
@@ -271,7 +287,7 @@ impl TypedStatement
         Ok(TypedStatement::If { 
             expression: Box::new(condition.unwrap()), 
             body: Box::new(body.unwrap()),
-            else_block: else_block.unwrap(),
+            else_block: else_block.flatten(),
         })
     }
 

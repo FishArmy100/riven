@@ -12,7 +12,7 @@ pub mod validation;
 
 fn main() 
 {
-    let file_1 = parse_file("tests/test.rvn", "src/test");
+    let file_1 = parse_file("tests/tick-tack-toe.rvn", "src/test");
     // let file_2 = parse_file("tests/debug.rvn", "src/debug");
 
     // println!("{:#?}", file_1);

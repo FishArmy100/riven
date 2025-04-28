@@ -49,6 +49,7 @@ impl StructDef
             file: &file,
             self_type: None,
             fn_ret_type: None,
+            loop_stack: Shared::new(0)
         };
 
         let mut errors = vec![];

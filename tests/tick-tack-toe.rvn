@@ -1,8 +1,6 @@
-use system.io;
-
 // consts not implemented yet
-fn BOARD_SIZE() -> Int { return 3; };
-fn EMPTY_CELL() String { return " " };
+fn BOARD_SIZE() -> Int { return 3; }
+fn EMPTY_CELL() -> String { return " "; }
 
 fn range(min: Int, max: Int) -> Fn() -> ?Int 
 {
@@ -69,7 +67,7 @@ fn Game.make_move(self, pos: Int) -> Bool
         println("Invalid move.");
         return false;
     }
-    self.board[pos] = self.currentPlayer;
+    self.board[pos] = self.current_player;
     return true;
 }
 
@@ -126,13 +124,13 @@ fn Game.is_draw(self) -> Bool
 
 fn Game.switch_player(self)
 {
-    if (self.currentPlayer == "X")
+    if (self.current_player == "X")
     {
-        self.currentPlayer = "O";
+        self.current_player = "O";
     }
     else
     {
-        self.currentPlayer = "X";
+        self.current_player = "X";
     }
 }
 
@@ -144,28 +142,28 @@ fn main()
 
     while (true)
     {
-        printBoard(game);
+        game.print_board();
         print("Player ");
         print(game.current_player);
         print(", enter your move (0-8): ");
 
         let input = read_line();
-        let game_move: ?Int = input.toInt();
+        let game_move: ?Int = input.to_int();
 
-        if (move.is_none())
+        if (game_move.is_none())
         {
             println("Invalid input. Please enter a number between 0 and 8.");
             continue;
         }
 
-        if (!game.make_move(move.unwrap()))
+        if (!game.make_move(game_move.unwrap()))
         {
             continue;
         }
 
         if (game.check_win())
         {
-            printBoard(game);
+            game.print_board();
             print("Player ");
             print(game.current_player);
             println(" wins!");

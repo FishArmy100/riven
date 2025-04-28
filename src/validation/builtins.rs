@@ -2,7 +2,7 @@ use uuid::Uuid;
 
 use crate::validation::info::struct_info::StructDeclData;
 
-use super::{info::{struct_info::StructInfo, types::TypeInfo}, operators::{BinaryOp, BinaryOpType, CastOp, GlobalOperators, IndexOp, UnaryOp, UnaryOpType}};
+use super::{info::{func_info::{FuncDeclData, FuncInfo, FuncInfoParam}, struct_info::StructInfo, types::TypeInfo}, operators::{BinaryOp, BinaryOpType, CastOp, GlobalOperators, IndexOp, UnaryOp, UnaryOpType}};
 
 pub const INT_TYPE_NAME: &str = "Int";
 pub const FLOAT_TYPE_NAME: &str = "Float";
@@ -23,9 +23,14 @@ lazy_static::lazy_static!
     pub static ref BOOL_TYPE: TypeInfo =    TypeInfo::Primary(BOOL_ID.clone());
     pub static ref STRING_TYPE: TypeInfo =  TypeInfo::Primary(STRING_ID.clone());
     pub static ref VOID_TYPE: TypeInfo =    TypeInfo::Primary(VOID_ID.clone());
+
+    pub static ref PRINT_ID: Uuid = Uuid::new_v4();
+    pub static ref PRINTLN_ID: Uuid = Uuid::new_v4();
+    pub static ref READ_LINE_ID: Uuid = Uuid::new_v4();
+    pub static ref STRING_TO_INT_ID: Uuid = Uuid::new_v4();
 }
 
-pub fn get_builtins() -> Vec<StructInfo>
+pub fn get_builtin_types() -> Vec<StructInfo>
 {
     let int_type = StructInfo {
         name: INT_TYPE_NAME.into(),
@@ -63,6 +68,129 @@ pub fn get_builtins() -> Vec<StructInfo>
     };
 
     vec![int_type, float_type, bool_type, string_type, void_type]
+}
+
+pub struct BuiltinFuncs 
+{
+    pub funcs: Vec<FuncInfo>,
+    pub unwrap_func_ids: Vec<Uuid>,
+    pub is_none_func_ids: Vec<Uuid>,
+}
+
+pub fn get_builtin_funcs(structs: &[Uuid]) -> BuiltinFuncs
+{
+    let println_func = FuncInfo {
+        id: PRINTLN_ID.clone(),
+        name: "println".into(),
+        parent: None,
+        has_self: false,
+        parameters: vec![FuncInfoParam {
+            name: "msg".into(),
+            type_info: STRING_TYPE.clone(),
+            init: None,
+            id: Uuid::new_v4(),
+        }],
+        returned: VOID_TYPE.clone(),
+        is_pub: true,
+        decl_data: FuncDeclData::Builtin,
+    };
+
+    let print_func = FuncInfo {
+        id: PRINT_ID.clone(),
+        name: "print".into(),
+        parent: None,
+        has_self: false,
+        parameters: vec![FuncInfoParam {
+            name: "msg".into(),
+            type_info: STRING_TYPE.clone(),
+            init: None,
+            id: Uuid::new_v4(),
+        }],
+        returned: VOID_TYPE.clone(),
+        is_pub: true,
+        decl_data: FuncDeclData::Builtin,
+    };
+
+    let read_line_func = FuncInfo {
+        id: READ_LINE_ID.clone(),
+        name: "read_line".into(),
+        parent: None,
+        has_self: false,
+        parameters: vec![],
+        returned: STRING_TYPE.clone(),
+        is_pub: true,
+        decl_data: FuncDeclData::Builtin,
+    };
+
+    let string_to_int_func = FuncInfo {
+        id: STRING_TO_INT_ID.clone(),
+        name: "to_int".into(),
+        parent: Some(STRING_TYPE.clone()),
+        has_self: true,
+        parameters: vec![FuncInfoParam {
+            name: "self".into(),
+            type_info: STRING_TYPE.clone(),
+            init: None,
+            id: Uuid::new_v4(),
+        }],
+        returned: TypeInfo::Optional(Box::new(INT_TYPE.clone())),
+        is_pub: true,
+        decl_data: FuncDeclData::Builtin,
+    };
+
+
+
+    let mut funcs = vec![print_func, println_func, read_line_func, string_to_int_func];
+
+    let mut unwrap_func_ids = vec![];
+    for s_id in structs
+    {
+        let func_id = Uuid::new_v4();
+        unwrap_func_ids.push(func_id.clone());
+        funcs.push(FuncInfo {
+            id: func_id,
+            name: "unwrap".into(),
+            parent: Some(TypeInfo::Optional(Box::new(TypeInfo::Primary(s_id.clone())))),
+            has_self: true,
+            parameters: vec![FuncInfoParam {
+                name: "self".into(),
+                type_info: TypeInfo::Optional(Box::new(TypeInfo::Primary(s_id.clone()))),
+                init: None,
+                id: Uuid::new_v4(),
+            }],
+            returned: TypeInfo::Primary(s_id.clone()),
+            is_pub: true,
+            decl_data: FuncDeclData::Builtin,
+        });
+    }
+
+    let mut is_none_func_ids = vec![];
+    for s_id in structs
+    {
+        let func_id = Uuid::new_v4();
+        is_none_func_ids.push(func_id.clone());
+        funcs.push(FuncInfo {
+            id: func_id,
+            name: "is_none".into(),
+            parent: Some(TypeInfo::Optional(Box::new(TypeInfo::Primary(s_id.clone())))),
+            has_self: true,
+            parameters: vec![FuncInfoParam {
+                name: "self".into(),
+                type_info: TypeInfo::Optional(Box::new(TypeInfo::Primary(s_id.clone()))),
+                init: None,
+                id: Uuid::new_v4(),
+            }],
+            returned: BOOL_TYPE.clone(),
+            is_pub: true,
+            decl_data: FuncDeclData::Builtin,
+        });
+    }
+
+    BuiltinFuncs { 
+        funcs, 
+        unwrap_func_ids, 
+        is_none_func_ids 
+    }
 }
 
 pub fn get_operators() -> GlobalOperators
@@ -107,6 +235,8 @@ fn make_bool_type_ops(ops: &mut GlobalOperators)
 {
     let bool_type = TypeInfo::Primary(BOOL_ID.clone());
     add_equality_ops(ops, bool_type.clone());
+    ops.add_binary_op(BinaryOp::make_uniform(BOOL_TYPE.clone(), BinaryOpType::And));
+    ops.add_binary_op(BinaryOp::make_uniform(BOOL_TYPE.clone(), BinaryOpType::Or));
 
     ops.add_unary_op(UnaryOp {
         input: bool_type.clone(),

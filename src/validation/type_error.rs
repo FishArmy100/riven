@@ -50,7 +50,10 @@ pub enum TypeError
         type_name: String,
         member: String,
         loc: TextLoc,
-    }
+    },
+    DuplicateMemberFunc(TextLoc),
+    CallingStaticFunctionOnNot(TextLoc),
+    BreakContinueInvalidSpot(TextLoc),
 }
 
 impl CompilerError for TypeError
@@ -88,6 +91,9 @@ impl CompilerError for TypeError
             TypeError::NoMainFn => format!("No main function found"),
             TypeError::InvalidMainArgs(_) => format!("Invalid main args"),
             TypeError::NoMember { type_name, member, loc: _ } => format!("No member {} on type {}", member, type_name),
+            TypeError::DuplicateMemberFunc(_) => format!("Member function with the same name already exists or the struct type has a member of the same name."),
+            TypeError::CallingStaticFunctionOnNot(_) => format!("Calling static member function on object instance"),
+            TypeError::BreakContinueInvalidSpot(_) => format!("Break or continue statements are not valid in this context"),
         }
     }
 
@@ -124,6 +130,9 @@ impl CompilerError for TypeError
             TypeError::NoMainFn => None,
             TypeError::InvalidMainArgs(text_loc) => Some(text_loc.clone()),
             TypeError::NoMember { type_name: _, member: _, loc } => Some(loc.clone()),
+            TypeError::DuplicateMemberFunc(loc) => Some(loc.clone()),
+            TypeError::CallingStaticFunctionOnNot(loc) => Some(loc.clone()),
+            TypeError::BreakContinueInvalidSpot(loc) => Some(loc.clone()),
         }
     }
 }

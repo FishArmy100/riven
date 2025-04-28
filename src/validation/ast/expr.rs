@@ -1,6 +1,7 @@
 use std::{collections::HashMap, sync::{Arc, Mutex}};
 
 use either::Either::{Left, Right};
+use itertools::Itertools;
 use uuid::Uuid;
 
 use crate::{
@@ -82,6 +83,7 @@ pub enum TypedExpression
         accessed: Box<TypedExpression>,
         name: String,
         returned: TypeInfo,
+        is_assignable: bool,
         loc: TextLoc,
     },
     TypeAccess
@@ -117,6 +119,7 @@ pub struct ExprCheckArgs<'a>
     pub file: &'a FileNode,
     pub fn_ret_type: Option<&'a TypeInfo>,
     pub self_type: Option<&'a TypeInfo>,
+    pub loop_stack: Shared<u32>,
 }
 
 impl<'a> ExprCheckArgs<'a>
@@ -151,7 +154,8 @@ impl<'a> ExprCheckArgs<'a>
             file: self.file, 
             var_stack: self.var_stack.clone(), 
             fn_ret_type: return_type, 
-            self_type: self.self_type
+            self_type: self.self_type,
+            loop_stack: self.loop_stack.clone(),
         }
     }
 }
@@ -270,10 +274,18 @@ impl TypedExpression
                     return Err(TypeError::InvalidLambdaExpressionFormat(loc));
                 };
 
+                args.var_stack.get_mut().push_frame();
+                for (name, type_info) in &parameters
+                {
+                    args.var_stack.get_mut().add_var(name.clone(), type_info.clone(), Uuid::new_v4());
+                }
+
                 let body = match TypedStatement::check_block(block, &args.to_stmt_args(Some(&ret_type))) {
                     Ok(ok) => ok,
                     Err(e) => return Err(e[0].clone())
                 };
+
+                args.var_stack.get_mut().pop_frame();
 
                 let returned = TypeInfo::Function { args: parameters.iter().map(|p| p.1.clone()).collect(), returned: Box::new(ret_type) };
 
@@ -349,19 +361,43 @@ impl TypedExpression
                 })
             },
             Expression::Access(AccessExpr { expression, dot: _, identifier }) => {
-                let expr = TypedExpression::check_expr(&expression, args, None)?;
-                let name = identifier.value_string().unwrap().clone();
-
                 let loc = (expression.get_pos() + identifier.pos).get_loc(&args.file.info);
-                
-                match eval_access(expr.returned(), &name, args)
+
+                if let Expression::Identifier(id) = expression.as_ref()
                 {
-                    Some(returned) => Ok(TypedExpression::Access { 
+                    let name = id.value_string().unwrap().clone();
+                    if !args.var_stack.get().resolve_var(&name).is_some() && 
+                       !args.context.func_resolver.resolve(None, id, args.file).is_ok()
+                    {
+                        let type_info_id = args.context.type_resolver.resolve_result(id, args.file)?;
+                        let type_info = TypeInfo::Primary(type_info_id);
+                        
+                        let func_id = args.context.func_resolver.resolve(Some(type_info.clone()), identifier, args.file).to_result(&args.file.info)?;
+                        let func_info = args.context.funcs.get(&func_id).unwrap();
+
+                        return Ok(Self::TypeAccess { 
+                            accessed: Box::new(type_info), 
+                            name, 
+                            func_id, 
+                            returned: func_info.get_type_info(), 
+                            loc
+                        })
+                    }
+                }
+
+                let expr = TypedExpression::check_expr(&expression, args, None)?;
+
+                let name = identifier.value_string().unwrap().clone();
+                
+                match eval_access(expr.returned(), &identifier, args)?
+                {
+                    Some((returned, is_assignable)) => Ok(TypedExpression::Access { 
                         accessed: Box::new(expr), 
                         name, 
                         returned, 
+                        is_assignable,
                         loc
-                    }),
+                    }), 
                     None => Err(TypeError::NoMember { 
                         type_name: expr.returned().pretty_print(&args.context.structs), 
                         member: name.clone(), 
@@ -507,7 +543,7 @@ impl TypedExpression
     {
         match self 
         {
-            Self::Access { accessed: _, name: _, returned: _, loc: _ } => todo!(),
+            Self::Access { accessed: _, name: _, returned: _, loc: _, is_assignable } => *is_assignable,
             Self::Identifier { id, returned: _, loc: _ } => match id {
                 TypedIdentifier::Function(_) => false,
                 TypedIdentifier::Variable(_) => true,
@@ -526,7 +562,7 @@ impl TypedExpression
             TypedExpression::Unary { operand: _, op: _, returned, loc: _ } => returned,
             TypedExpression::Call { called: _, args: _, returned, loc: _ } => returned,
             TypedExpression::Index { indexed: _, arg: _, returned, loc: _ } => returned,
-            TypedExpression::Access { accessed: _, name: _, returned, loc: _ } => returned,
+            TypedExpression::Access { accessed: _, name: _, returned, loc: _, is_assignable: _ } => returned,
             TypedExpression::Cast { casted: _, type_info: _, returned, loc: _ } => returned,
             TypedExpression::Construction { type_id: _, args: _, returned, loc: _ } => returned,
             TypedExpression::Identifier { id: _, returned, loc: _ } => returned,
@@ -545,7 +581,7 @@ impl TypedExpression
             TypedExpression::Unary { operand: _, op: _, returned: _, loc } => loc,
             TypedExpression::Call { called: _, args: _, returned: _, loc } => loc,
             TypedExpression::Index { indexed: _, arg: _, returned: _, loc } => loc,
-            TypedExpression::Access { accessed: _, name: _, returned: _, loc } => loc,
+            TypedExpression::Access { accessed: _, name: _, returned: _, loc, is_assignable: _ } => loc,
             TypedExpression::Cast { casted: _, type_info: _, returned: _, loc } => loc,
             TypedExpression::Construction { type_id: _, args: _, returned: _, loc } => loc,
             TypedExpression::Identifier { id: _, returned: _, loc } => loc,
@@ -606,15 +642,30 @@ fn check_construction_args(info: &StructInfo, con_args: &[ConstructionArg], args
     Ok(expressions)
 }
 
-fn eval_access(assigned: &TypeInfo, name: &String, args: &ExprCheckArgs) -> Option<TypeInfo>
+fn eval_access(accessed: &TypeInfo, name: &Token, args: &ExprCheckArgs) -> Result<Option<(TypeInfo, bool)>, TypeError>
 {
-    let TypeInfo::Primary(id) = assigned else {
-        return None;
+    if let FuncResolverResult::Ok(ok) = args.context.func_resolver.resolve(Some(accessed.clone()), name, args.file)
+    {
+        let func_def = args.context.funcs.get(&ok).unwrap();
+        if !func_def.has_self
+        {
+            return Err(TypeError::CallingStaticFunctionOnNot(name.get_loc(&args.file.info)));
+        }
+        
+        let params = func_def.parameters[1..].iter().map(|p| p.type_info.clone()).collect_vec();
+        let ret = Box::new(func_def.returned.clone());
+        return Ok(Some((TypeInfo::Function { args: params, returned: ret }, false)));
+    }
+
+    let TypeInfo::Primary(id) = accessed else {
+        return Ok(None);
     };
 
-    args.context.structs.get(id)
+    let name = name.value_string().unwrap().clone();
+
+    Ok(args.context.structs.get(id)
         .unwrap()
         .members()
-        .get(name)
-        .map(|m| m.type_info.clone())
+        .get(&name)
+        .map(|m| m.type_info.clone()).map(|m| (m, true)))
 }

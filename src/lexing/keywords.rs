@@ -30,6 +30,7 @@ lazy_static::lazy_static!
         map.insert(KW_AS.into(), TokenType::As);
         map.insert(KW_BREAK.into(), TokenType::Break);
         map.insert(KW_CONST.into(), TokenType::Const);
+        map.insert(KW_CONTINUE.into(), TokenType::Continue);
         map.insert(KW_ELSE.into(), TokenType::Else);
         map.insert(KW_FALSE.into(), TokenType::False);
         map.insert(KW_FN.into(), TokenType::Fn);

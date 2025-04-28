@@ -45,13 +45,13 @@ impl FuncDef
         let (decl, file) = match &info.decl_data
         {
             FuncDeclData::Decl { decl, file } => (decl, file),
-            FuncDeclData::Builtin { params } => {
+            FuncDeclData::Builtin => {
                 return Ok(Self { 
                     id: info.id.clone(), 
                     name: info.name.clone(), 
                     is_pub: info.is_pub, 
                     returned: info.returned.clone(), 
-                    params: params.clone(), 
+                    params: info.parameters.iter().map(|p| FuncDefParam { name: p.name.clone(), type_info: p.type_info.clone(), init: None }).collect(), 
                     body: None,
                     name_loc: None,
                 })
@@ -65,6 +65,7 @@ impl FuncDef
             file: &file,
             self_type: info.parent.as_ref(),
             fn_ret_type: None,
+            loop_stack: Shared::new(0)
         };
 
         for param in &info.parameters
@@ -111,6 +112,7 @@ impl FuncDef
             var_stack: body_var_stack.clone(),
             fn_ret_type: Some(&info.returned),
             self_type: info.parent.as_ref(),
+            loop_stack: Shared::new(0)
         };
 
         let body = match TypedStatement::check_block(&decl.body, &mut stmt_check_args){
@@ -152,7 +154,7 @@ impl FuncDef
             params, 
             body: Some(body.unwrap()),
             returned: info.returned.clone(),
-            name_loc: Some(decl.id.get_loc(&file.info))
+            name_loc: Some(decl.id.get_loc(&file.info ))
         })
     }
 }

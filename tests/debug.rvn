@@ -1,5 +1,20 @@
 
-fn print(i: Int = 5) -> Int
+struct Vec2 {
+    x: Float,
+    y: Float,
+}
+
+fn Vec2.add(self, other: Vec2) -> Vec2
 {
-    return i;
+    Vec2 {
+        x: self.x + other.x,
+        y: self.y + other.y,
+    }
+}
+
+fn main()
+{
+    let a = Vec2 { x: 5.0, y: -1.5 };
+    let b = Vec2 { x: -5.0, y: 1.5 };
+    let c = a.add(b);
 }

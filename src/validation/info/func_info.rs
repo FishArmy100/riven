@@ -1,10 +1,11 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
+use itertools::Itertools;
 use uuid::Uuid;
 
-use crate::{parsing::ast::{Declaration, Expression, FileNode, FnDecl}, validation::{builtins::VOID_TYPE, defs::func_def::FuncDefParam, type_error::TypeError}};
+use crate::{parsing::ast::{Declaration, Expression, FileNode, FnDecl, TypeName}, validation::{builtins::VOID_TYPE, defs::func_def::FuncDefParam, type_error::TypeError}};
 
-use super::{types::TypeInfo, FuncResolver, TypeResolver};
+use super::{struct_info::StructInfo, types::TypeInfo, FuncResolver, TypeResolver};
 
 #[derive(Debug, Clone)]
 pub enum FuncDeclData
@@ -14,10 +15,7 @@ pub enum FuncDeclData
         decl: Arc<FnDecl>,
         file: Arc<FileNode>
     },
-    Builtin 
-    {
-        params: Vec<FuncDefParam>
-    }
+    Builtin
 }
 
 #[derive(Debug, Clone)]
@@ -44,7 +42,7 @@ pub struct FuncInfo
 
 impl FuncInfo
 {
-    pub fn from_file(type_resolver: &TypeResolver, func_resolver: &FuncResolver, file: Arc<FileNode>) -> Result<Vec<Self>, Vec<TypeError>>
+    pub fn from_file(type_resolver: &TypeResolver, func_resolver: &FuncResolver, file: Arc<FileNode>, structs: &HashMap<Uuid, StructInfo>) -> Result<Vec<Self>, Vec<TypeError>>
     {
         let mut errors = vec![];
         let mut infos = vec![];
@@ -53,7 +51,7 @@ impl FuncInfo
         {
             if let Declaration::Fn(s) = d 
             {
-                match Self::new(s.clone(), type_resolver, func_resolver, file.clone())
+                match Self::new(s.clone(), type_resolver, func_resolver, file.clone(), structs)
                 {
                     Ok(ok) => infos.push(ok),
                     Err(e) => errors.push(e),
@@ -69,7 +67,7 @@ impl FuncInfo
         Ok(infos)
     }
     
-    pub fn new(decl: Arc<FnDecl>, resolver: &TypeResolver, func_resolver: &FuncResolver, file: Arc<FileNode>) -> Result<Self, TypeError>
+    pub fn new(decl: Arc<FnDecl>, resolver: &TypeResolver, func_resolver: &FuncResolver, file: Arc<FileNode>, structs: &HashMap<Uuid, StructInfo>) -> Result<Self, TypeError>
     {
         let name = decl.id.value_string().unwrap().clone();
         let parent_type =  match &decl.type_name 
@@ -77,6 +75,15 @@ impl FuncInfo
             Some((_, t)) => Some(TypeInfo::from(t, resolver, &file)?),
             None => None,
         };
+
+        if let Some((_, TypeName::Identifier(id))) = &decl.type_name // check if this is a struct type
+        {
+            let id = resolver.resolve_result(id, &file).unwrap();
+            if structs.get(&id).unwrap().members().contains_key(&name) // the struct has a member of the same name
+            {
+                return Err(TypeError::DuplicateMemberFunc(decl.id.get_loc(&file.info)));
+            }
+        }
 
         let fn_id = func_resolver.get_func_id(&file.info.path.split_relative(), parent_type, name.clone()).unwrap();
 

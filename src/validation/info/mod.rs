@@ -26,7 +26,6 @@ impl InfoContext
     pub fn new(program: &Program) -> Result<Self, Vec<TypeError>>
     {
         let mut type_resolver = TypeResolver::new();
-        let mut func_resolver = FuncResolver::new();
 
         let mut errors = vec![];
 
@@ -37,6 +36,10 @@ impl InfoContext
                 errors.extend(e);
             }
         }
+        
+        let all_types = type_resolver.type_ids();
+        let built_in_funcs = builtins::get_builtin_funcs(&all_types);
+        let mut func_resolver = FuncResolver::new(&built_in_funcs.funcs);
 
         for file in &program.files
         {
@@ -47,7 +50,16 @@ impl InfoContext
         }
 
         let mut structs = HashMap::new();
+        for b in builtins::get_builtin_types()
+        {
+            structs.insert(b.id.clone(), b);
+        }
+        
         let mut funcs = HashMap::new();
+        for b in &built_in_funcs.funcs
+        {
+            funcs.insert(b.id.clone(), b.clone());
+        }
         
         for file in &program.files
         {
@@ -56,15 +68,18 @@ impl InfoContext
                 Ok(ok) => ok.into_iter().for_each(|s| { structs.insert(s.id.clone(), s); }),
                 Err(e) => errors.extend(e),
             }
+        }
 
-            match FuncInfo::from_file(&type_resolver, &func_resolver, file.clone())
+        for file in &program.files
+        {
+            match FuncInfo::from_file(&type_resolver, &func_resolver, file.clone(), &structs)
             {
                 Ok(ok) => ok.into_iter().for_each(|f| { funcs.insert(f.id.clone(), f); }),
                 Err(e) => errors.extend(e),
             }
         }
 
-        for b in builtins::get_builtins()
+        for b in builtins::get_builtin_types()
         {
             structs.insert(b.id.clone(), b);
         }
@@ -116,7 +131,7 @@ impl TypeResolver
     {
         let mut map = HashMap::<Vec<String>, HashMap<String, Uuid>>::new();
         let bins: &mut HashMap<_, _> = map.entry(vec![]).or_default();
-        for b in builtins::get_builtins()
+        for b in builtins::get_builtin_types()
         {
             bins.insert(b.name, b.id);
         }
@@ -150,6 +165,14 @@ impl TypeResolver
         }
 
         Ok(())
+    }
+
+    pub fn type_ids(&self) -> Vec<Uuid>
+    {
+        self.map.values()
+            .map(|v| v.values().map(|id| id.clone()))
+            .flatten()
+            .collect()
     }
 
     pub fn resolve(&self, token: &Token, file: &FileNode) -> TypeResolverResult
@@ -205,6 +228,15 @@ impl FuncResolverResult
             FuncResolverResult::Ok(uuid) => Ok(uuid.clone()),
         }
     }
+
+    pub fn is_ok(&self) -> bool 
+    {
+        match self 
+        {
+            Self::Ok(_) => true,
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -215,9 +247,16 @@ pub struct FuncResolver
 
 impl FuncResolver
 {
-    pub fn new() -> Self 
+    pub fn new(builtins: &Vec<FuncInfo>) -> Self 
     {
-        Self { map: HashMap::new() }
+        let mut map = HashMap::<Vec<String>, HashMap<(Option<TypeInfo>, String), Uuid>>::new();
+        let bins: &mut HashMap<_, _> = map.entry(vec![]).or_default();
+        for b in builtins
+        {
+            bins.insert((b.parent.clone(), b.name.clone()), b.id);
+        }
+        
+        Self { map }
     }
 
     pub fn append_file(&mut self, file: &FileNode, type_resolver: &TypeResolver) -> Result<(), Vec<TypeError>>
@@ -243,7 +282,7 @@ impl FuncResolver
 
                 if file_types.contains_key(&(parent_type.clone(), name.clone()))
                 {
-                    errors.push(TypeError::DuplicateTypeDef(f.id.clone(), f.id.get_loc(&file.info)));
+                    errors.push(TypeError::DuplicateMemberFunc(f.id.get_loc(&file.info)));
                 }
                 else 
                 {
