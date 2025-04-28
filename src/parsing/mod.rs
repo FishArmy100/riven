@@ -4,44 +4,46 @@ pub mod expr_parsing;
 pub mod stmt_parsing;
 pub mod ast;
 
-use stmt_parsing::{parse_declaration, parse_use_stmt};
+use std::sync::Arc;
+
+use itertools::Itertools;
 pub use type_parsing::*;
 pub use expr_parsing::*;
+pub use stmt_parsing::*;
 
 use token_reader::TokenReader;
-use crate::{compiler::CompilerError, lexing::token::{Token, TokenType}};
+use crate::{compiler::CompilerError, lexing::token::{Token, TokenType}, utils::{FileInfo, PathInfo, TextLoc}};
 use self::ast::*;
-use crate::utils::TextPos;
 
 #[derive(Debug, Clone)]
 pub enum ParserError
 {
-    ExpectedExpression(Option<Token>),
-    ExpectedType(Option<Token>),
-    ExpectedToken(TokenType, Option<Token>),
-    ExpectedTokens(Vec<TokenType>, Option<Token>),
-    ExpectedALambdaParameter(Option<Token>),
-    ExpectedALambdaBody(Option<Token>),
-    ExpectedStatement(Option<Token>),
-    ExpectedBlock(Option<Token>),
-    ExpectedDeclaration(Option<Token>),
+    ExpectedExpression(TextLoc),
+    ExpectedType(TextLoc),
+    ExpectedToken(TokenType, TextLoc),
+    ExpectedTokens(Vec<TokenType>, TextLoc),
+    ExpectedALambdaParameter(TextLoc),
+    ExpectedALambdaBody(TextLoc),
+    ExpectedStatement(TextLoc),
+    ExpectedBlock(TextLoc),
+    ExpectedDeclaration(TextLoc),
 }
 
 impl CompilerError for ParserError
 {
-    fn pos(&self) -> Option<TextPos> 
+    fn loc(&self) -> Option<TextLoc>
     {
         match self 
         {
-            ParserError::ExpectedExpression(token) => token.as_ref().map(|t| t.pos),
-            ParserError::ExpectedType(token) => token.as_ref().map(|t| t.pos),
-            ParserError::ExpectedToken(_, token) => token.as_ref().map(|t| t.pos),
-            ParserError::ExpectedTokens(_, token) => token.as_ref().map(|t| t.pos),
-            ParserError::ExpectedALambdaParameter(token) => token.as_ref().map(|t| t.pos),
-            ParserError::ExpectedStatement(token) => token.as_ref().map(|t| t.pos),
-            ParserError::ExpectedBlock(token) => token.as_ref().map(|t| t.pos),
-            ParserError::ExpectedDeclaration(token) => token.as_ref().map(|t| t.pos),
-            ParserError::ExpectedALambdaBody(token) => token.as_ref().map(|t| t.pos),
+            ParserError::ExpectedExpression(loc) => Some(loc.clone()),
+            ParserError::ExpectedType(loc) => Some(loc.clone()),
+            ParserError::ExpectedToken(_, loc) => Some(loc.clone()),
+            ParserError::ExpectedTokens(_, loc) => Some(loc.clone()),
+            ParserError::ExpectedALambdaParameter(loc) => Some(loc.clone()),
+            ParserError::ExpectedStatement(loc) => Some(loc.clone()),
+            ParserError::ExpectedBlock(loc) => Some(loc.clone()),
+            ParserError::ExpectedDeclaration(loc) => Some(loc.clone()),
+            ParserError::ExpectedALambdaBody(loc) => Some(loc.clone()),
         }
     }
 
@@ -64,9 +66,9 @@ impl CompilerError for ParserError
 
 pub type ParserResult<T> = Result<T, ParserError>;
 
-pub fn parse_file(tokens: &Vec<Token>) -> Result<Option<FileNode>, Vec<ParserError>>
+pub fn parse_file(tokens: &Vec<Token>, file: Arc<FileInfo>) -> Result<Option<FileNode>, Vec<ParserError>>
 {
-    let Some(mut reader) = TokenReader::new(tokens, None) else { return Ok(None) };
+    let mut reader = TokenReader::new(tokens, &file, None);
     let mut usings = vec![];
     let mut declarations = vec![];
     let mut errors = vec![];
@@ -79,7 +81,7 @@ pub fn parse_file(tokens: &Vec<Token>) -> Result<Option<FileNode>, Vec<ParserErr
             Ok(None) => break,
             Err(err) => {
                 errors.push(err);
-                reader.synchronize(&[TokenType::EOF, TokenType::Use, TokenType::Const, TokenType::Fn, TokenType::Struct]);
+                reader.synchronize(&[TokenType::EOF, TokenType::Pub, TokenType::Use, TokenType::Const, TokenType::Fn, TokenType::Struct]);
             },
         }
     }
@@ -92,7 +94,7 @@ pub fn parse_file(tokens: &Vec<Token>) -> Result<Option<FileNode>, Vec<ParserErr
             Ok(None) => break,
             Err(err) => {
                 errors.push(err);
-                reader.synchronize(&[TokenType::EOF, TokenType::Const, TokenType::Fn, TokenType::Struct]);
+                reader.synchronize(&[TokenType::EOF, TokenType::Pub, TokenType::Const, TokenType::Fn, TokenType::Struct]);
             },
         }
     }
@@ -110,20 +112,32 @@ pub fn parse_file(tokens: &Vec<Token>) -> Result<Option<FileNode>, Vec<ParserErr
         return Err(errors)
     }
 
-    Ok(Some(FileNode { 
+    let mut using_paths = usings.iter()
+        .map(|u| u.ids.iter()
+            .map(|id| id.value_string().unwrap().clone())
+            .collect_vec())
+        .collect_vec();
+
+    // a bit borked, but should work
+    using_paths.push(vec![]);
+    using_paths.push(file.path.split_relative());
+
+    Ok(Some(FileNode {
         usings, 
+        using_paths,
         declarations, 
-        eof 
+        eof,
+        info: file,
     }))
 }
 
 fn expect_ast_item<P, R, E>(reader: &mut TokenReader, predicate: P, error: E) -> ParserResult<R>
     where P : Fn(&mut TokenReader) -> ParserResult<Option<R>>,
-          E : Fn(Option<Token>) -> ParserError
+          E : Fn(TextLoc) -> ParserError
 {
     match predicate(reader)?
     {
         Some(r) => Ok(r),
-        None => Err(error(reader.current()))
+        None => Err(error(reader.current_loc()))
     }
 }

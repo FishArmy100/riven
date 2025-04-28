@@ -15,7 +15,7 @@ pub fn expect_statement(reader: &mut TokenReader) -> ParserResult<Statement>
     }
     else
     {
-        Err(ParserError::ExpectedStatement(reader.current()))    
+        Err(ParserError::ExpectedStatement(reader.current_loc()))    
     }
 }
 
@@ -97,7 +97,7 @@ pub fn expect_block_stmt(reader: &mut TokenReader) -> ParserResult<BlockStmt>
     match parse_block_stmt(reader)?
     {
         Some(b) => Ok(b),
-        None => Err(ParserError::ExpectedBlock(reader.current()))
+        None => Err(ParserError::ExpectedBlock(reader.current_loc()))
     }
 }
 
@@ -270,7 +270,7 @@ fn parse_struct_decl(reader: &mut TokenReader) -> ParserResult<Option<StructDecl
     let Some(struct_tok) = reader.check(TokenType::Struct) else { 
         if pub_tok.is_some()
         {
-            return Err(ParserError::ExpectedDeclaration(reader.current()))
+            return Err(ParserError::ExpectedDeclaration(reader.current_loc()))
         }
 
         return Ok(None); 
@@ -299,7 +299,7 @@ fn parse_struct_decl(reader: &mut TokenReader) -> ParserResult<Option<StructDecl
     }))
 }
 
-fn parse_struct_member(reader: &mut TokenReader) -> ParserResult<Option<StructMember>>
+fn parse_struct_member(reader: &mut TokenReader) -> ParserResult<Option<StructDeclMember>>
 {
     if !reader.is_sequence(&[TokenType::Identifier, TokenType::Colon]) 
     {
@@ -313,26 +313,26 @@ fn parse_struct_member(reader: &mut TokenReader) -> ParserResult<Option<StructMe
 
     let initializer = if let Some(equal) = reader.check(TokenType::Equal) {
         let expression = expect_expression(reader, parse_expression)?;
-        Some((equal, expression))
+        Some((equal, Arc::new(expression)))
     } else { None };
 
-    Ok(Some(StructMember {
+    Ok(Some(StructDeclMember {
         id,
         colon, 
         type_name, 
-        initializer 
+        initializer
     }))
 }
 
 fn parse_fn_decl(reader: &mut TokenReader) -> ParserResult<Option<FnDecl>>
 {
-    let pub_tok = if reader.is_sequence(&[TokenType::Pub, TokenType::Struct]) { reader.advance() } else { None };
+    let pub_tok = if reader.is_sequence(&[TokenType::Pub, TokenType::Fn]) { reader.advance() } else { None };
 
     let Some(fn_tok) = reader.check(TokenType::Fn) else { 
 
         if pub_tok.is_some()
         {
-            return Err(ParserError::ExpectedDeclaration(reader.current()))
+            return Err(ParserError::ExpectedDeclaration(reader.current_loc()))
         }
 
         return Ok(None) 
@@ -356,7 +356,7 @@ fn parse_fn_decl(reader: &mut TokenReader) -> ParserResult<Option<FnDecl>>
     let self_param = reader.check(TokenType::SelfVal);
     if self_param.is_some() && !reader.current_is(&[TokenType::Comma, TokenType::CloseParen])
     {
-        return Err(ParserError::ExpectedToken(TokenType::Comma, reader.current()))
+        return Err(ParserError::ExpectedToken(TokenType::Comma, reader.current_loc()))
     }
 
     reader.check(TokenType::Comma); // advance past the comma
@@ -385,7 +385,7 @@ fn parse_fn_decl(reader: &mut TokenReader) -> ParserResult<Option<FnDecl>>
         params, 
         close_paren, 
         return_type,
-        body 
+        body: Arc::new(body),
     }))
 }
 
@@ -398,7 +398,7 @@ fn parse_fn_param(reader: &mut TokenReader) -> ParserResult<Option<FnParam>>
 
         let default_value = if let Some(equal) = reader.check(TokenType::Equal) {
             let expression = expect_expression(reader, parse_expression)?;
-            Some((equal, expression))
+            Some((equal, Arc::new(expression)))
         } else { None };
 
         Ok(Some(FnParam {
@@ -452,7 +452,7 @@ fn parse_let(reader: &mut TokenReader) -> ParserResult<Option<LetStmt>>
 
 fn parse_const(reader: &mut TokenReader) -> ParserResult<Option<ConstStmt>>
 {
-    let pub_tok = if reader.is_sequence(&[TokenType::Pub, TokenType::Struct]) { reader.advance() } else { None };
+    let pub_tok = if reader.is_sequence(&[TokenType::Pub, TokenType::Const]) { reader.advance() } else { None };
 
     if let Some(const_tok) = reader.check(TokenType::Const)
     {
@@ -480,7 +480,7 @@ fn parse_const(reader: &mut TokenReader) -> ParserResult<Option<ConstStmt>>
     {
         if pub_tok.is_some()
         {
-            return Err(ParserError::ExpectedDeclaration(reader.current()))
+            return Err(ParserError::ExpectedDeclaration(reader.current_loc()))
         }
 
         Ok(None)
@@ -516,7 +516,7 @@ pub fn parse_use_stmt(reader: &mut TokenReader) -> ParserResult<Option<UseStmt>>
 
         if ids.len() == 0
         {
-            return Err(ParserError::ExpectedToken(TokenType::Identifier, reader.current()));
+            return Err(ParserError::ExpectedToken(TokenType::Identifier, reader.current_loc()));
         }
 
         let semi_colon = reader.expect(TokenType::SemiColon)?;
@@ -536,14 +536,14 @@ pub fn parse_use_stmt(reader: &mut TokenReader) -> ParserResult<Option<UseStmt>>
 
 fn parse_assignment(reader: &mut TokenReader) -> ParserResult<Option<AssignStmt>>
 {
-    if let Some(value) = is_expression_and(reader, |r| r.current_is(ASSIGNMENT_TOKENS))
+    if let Some(assigned) = is_expression_and(reader, |r| r.current_is(ASSIGNMENT_TOKENS))
     {
         let equal = reader.advance().unwrap();
         let expression = expect_expression(reader, parse_expression)?;
         let semi_colon = reader.expect(TokenType::SemiColon)?;
 
         Ok(Some(AssignStmt {
-            value,
+            assigned: Box::new(assigned),
             equal,
             expression,
             semi_colon

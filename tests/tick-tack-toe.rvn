@@ -1,7 +1,23 @@
-use system.io;
+// consts not implemented yet
+fn BOARD_SIZE() -> Int { return 3; }
+fn EMPTY_CELL() -> String { return " "; }
 
-const BOARD_SIZE: Int = 3;
-const EMPTY_CELL: Int = " ";
+fn range(min: Int, max: Int) -> Fn() -> ?Int 
+{
+    let i = min;
+    return || -> ?Int => {
+        if (i < max) 
+        {
+            let old = i;
+            i = i + 1;
+            return old as ?Int;
+        }
+        else
+        {
+            return null;
+        }
+    };
+}
 
 struct Game
 {
@@ -12,26 +28,31 @@ struct Game
 fn Game.new() -> Game
 {
     return Game {
-        board: []String.filled(EMPTY_CELL, BOARD_SIZE * BOARD_SIZE),
+        board: [
+            EMPTY_CELL(), EMPTY_CELL(), EMPTY_CELL(), 
+            EMPTY_CELL(), EMPTY_CELL(), EMPTY_CELL(), 
+            EMPTY_CELL(), EMPTY_CELL(), EMPTY_CELL()
+        ],
+        
         current_player: "X"
     };
 }
 
 fn Game.print_board(self)
 {
-    for (i in range(0, BOARD_SIZE))
+    for (i in range(0, BOARD_SIZE()))
     {
-        for (j in range(0, BOARD_SIZE))
+        for (j in range(0, BOARD_SIZE()))
         {
             print(" ");
-            print(self.board[i * BOARD_SIZE + j]);
-            if (j < BOARD_SIZE - 1)
+            print(self.board[i * BOARD_SIZE() + j]);
+            if (j < BOARD_SIZE() - 1)
             {
                 print(" |");
             }
         }
         println("");
-        if (i < BOARD_SIZE - 1)
+        if (i < BOARD_SIZE() - 1)
         {
             println("---+---+---");
         }
@@ -41,45 +62,45 @@ fn Game.print_board(self)
 
 fn Game.make_move(self, pos: Int) -> Bool
 {
-    if (pos < 0 || pos >= BOARD_SIZE * BOARD_SIZE || self.board[pos] != EMPTY_CELL)
+    if (pos < 0 || pos >= BOARD_SIZE() * BOARD_SIZE() || self.board[pos] != EMPTY_CELL())
     {
         println("Invalid move.");
         return false;
     }
-    self.board[pos] = self.currentPlayer;
+    self.board[pos] = self.current_player;
     return true;
 }
 
 fn Game.check_win(self) -> Bool
 {
-    for (i in range(0, BOARD_SIZE))
+    for (i in range(0, BOARD_SIZE()))
     {
-        if (self.board[i * BOARD_SIZE] != EMPTY_CELL &&
-           self.board[i * BOARD_SIZE] == self.board[i * BOARD_SIZE + 1] &&
-           self.board[i * BOARD_SIZE + 1] == self.board[i * BOARD_SIZE + 2])
+        if (self.board[i * BOARD_SIZE()] != EMPTY_CELL() &&
+           self.board[i * BOARD_SIZE()] == self.board[i * BOARD_SIZE() + 1] &&
+           self.board[i * BOARD_SIZE() + 1] == self.board[i * BOARD_SIZE() + 2])
         {
             return true;
         }
     }
 
-    for (i in range(0, BOARD_SIZE))
+    for (i in range(0, BOARD_SIZE()))
     {
-        if (self.board[i] != EMPTY_CELL &&
-           self.board[i] == self.board[i + BOARD_SIZE] &&
-           self.board[i + BOARD_SIZE] == self.board[i + 2 * BOARD_SIZE])
+        if (self.board[i] != EMPTY_CELL() &&
+           self.board[i] == self.board[i + BOARD_SIZE()] &&
+           self.board[i + BOARD_SIZE()] == self.board[i + 2 * BOARD_SIZE()])
         {
             return true;
         }
     }
 
-    if (self.board[0] != EMPTY_CELL &&
+    if (self.board[0] != EMPTY_CELL() &&
        self.board[0] == self.board[4] &&
        self.board[4] == self.board[8])
     {
         return true;
     }
 
-    if (self.board[2] != EMPTY_CELL &&
+    if (self.board[2] != EMPTY_CELL() &&
        self.board[2] == self.board[4] &&
        self.board[4] == self.board[6])
     {
@@ -91,9 +112,9 @@ fn Game.check_win(self) -> Bool
 
 fn Game.is_draw(self) -> Bool
 {
-    for (i in range(0, BOARD_SIZE * BOARD_SIZE))
+    for (i in range(0, BOARD_SIZE() * BOARD_SIZE()))
     {
-        if (self.board[i] == EMPTY_CELL)
+        if (self.board[i] == EMPTY_CELL())
         {
             return false;
         }
@@ -103,13 +124,13 @@ fn Game.is_draw(self) -> Bool
 
 fn Game.switch_player(self)
 {
-    if (self.currentPlayer == "X")
+    if (self.current_player == "X")
     {
-        self.currentPlayer = "O";
+        self.current_player = "O";
     }
     else
     {
-        self.currentPlayer = "X";
+        self.current_player = "X";
     }
 }
 
@@ -121,28 +142,28 @@ fn main()
 
     while (true)
     {
-        printBoard(game);
+        game.print_board();
         print("Player ");
         print(game.current_player);
         print(", enter your move (0-8): ");
 
         let input = read_line();
-        let game_move: ?Int = input.toInt();
+        let game_move: ?Int = input.to_int();
 
-        if (move.is_none())
+        if (game_move.is_none())
         {
             println("Invalid input. Please enter a number between 0 and 8.");
             continue;
         }
 
-        if (!game.make_move(move.unwrap()))
+        if (!game.make_move(game_move.unwrap()))
         {
             continue;
         }
 
         if (game.check_win())
         {
-            printBoard(game);
+            game.print_board();
             print("Player ");
             print(game.current_player);
             println(" wins!");

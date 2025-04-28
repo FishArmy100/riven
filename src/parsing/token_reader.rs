@@ -1,4 +1,4 @@
-use crate::lexing::token::{Token, TokenType};
+use crate::{lexing::token::{Token, TokenType}, utils::{FileInfo, TextLoc, TextPos}};
 
 use super::{ParserError, ParserResult};
 
@@ -7,18 +7,18 @@ pub struct TokenReader<'a>
 {
     tokens: &'a [Token],
     index: usize,
+    file: &'a FileInfo,
 }
 
 impl<'a> TokenReader<'a>
 {
-    pub fn new(tokens: &'a [Token], start_index: Option<usize>) -> Option<Self>
+    pub fn new(tokens: &'a [Token], file: &'a FileInfo, start_index: Option<usize>) -> Self
     {
-        if tokens.len() == 0 || start_index.is_some_and(|s| s >= tokens.len()) { return None };
-
-        Some(Self {
+        Self {
             tokens,
-            index: start_index.map_or(0, |v| v)
-        })
+            index: start_index.map_or(0, |v| v),
+            file,
+        }
     }
 
     pub fn index(&self) -> usize
@@ -45,6 +45,18 @@ impl<'a> TokenReader<'a>
         else 
         {
             None    
+        }
+    }
+
+    pub fn current_loc(&self) -> TextLoc
+    {
+        match self.current()
+        {
+            Some(current) => current.get_loc(self.file),
+            None => {
+                let len = self.file.chars.len();
+                TextPos::uniform(len).get_loc(self.file)
+            },
         }
     }
 
@@ -82,6 +94,11 @@ impl<'a> TokenReader<'a>
     pub fn peek_is(&self, count: usize, t: TokenType) -> bool
     {
         self.peek(count).is_some_and(|token| token.token_type == t)
+    }
+
+    pub fn peek_many_is(&self, count: usize, types: &[TokenType]) -> bool
+    {
+        types.iter().any(|t| self.peek_is(count, *t))
     }
 
     pub fn peek_sequence_is(&self, count: usize, types: &[TokenType]) -> bool
@@ -173,7 +190,7 @@ impl<'a> TokenReader<'a>
         match self.check(t)
         {
             Some(token) => Ok(token),
-            None => Err(ParserError::ExpectedToken(t, self.current()))
+            None => Err(ParserError::ExpectedToken(t, self.current_loc()))
         }
     }
 
@@ -182,7 +199,7 @@ impl<'a> TokenReader<'a>
         match self.check_many(tokens)
         {
             Some(token) => Ok(token),
-            None => Err(ParserError::ExpectedTokens(tokens.to_vec(), self.current()))
+            None => Err(ParserError::ExpectedTokens(tokens.to_vec(), self.current_loc()))
         }
     }
 

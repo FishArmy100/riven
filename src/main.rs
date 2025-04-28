@@ -1,28 +1,44 @@
-use itertools::Itertools;
+use std::sync::Arc;
+use compiler::CompilerError;
+use parsing::ast::{FileNode, Program};
+use utils::{write_file, FileInfo};
+use validation::CheckedProgram;
 
 pub mod lexing;
 pub mod utils;
 pub mod compiler;
 pub mod parsing;
+pub mod validation;
 
 fn main() 
 {
-    let file = "tests/tick-tack-toe.rvn";
-    let src = utils::read_file(file)
-        .unwrap()
-        .chars()
-        .collect_vec();
+    let file_1 = parse_file("tests/tick-tack-toe.rvn", "src/test");
+    // let file_2 = parse_file("tests/debug.rvn", "src/debug");
 
-    let result = compiler::run_parser(&src, Some(file));
+    // println!("{:#?}", file_1);
 
-    match result 
+    let program = Program {
+        files: vec![file_1]
+    };
+
+    println!("Context compiled");
+
+    let checked = CheckedProgram::new(&program);
+    match checked
     {
-        Ok(ok) => utils::write_file("out/tick-tack-toe.ast", &format!("{:#?}", ok)).unwrap(),
-        Err(errors) => {
-            for error in errors
+        Ok(ok) => write_file("out/checked.txt", &format!("{:#?}", ok)).unwrap(),
+        Err(errs) => {
+            for e in errs
             {
-                println!("{}", error);
+                println!("{}", e.format_error())
             }
         },
     }
+}
+
+fn parse_file(path: &str, namespace: &str) -> Arc<FileNode>
+{
+    let file = FileInfo::read(path, namespace).unwrap();
+    let file = compiler::run_parser(Arc::new(file)).unwrap();
+    Arc::new(file)
 }

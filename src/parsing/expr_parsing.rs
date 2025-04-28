@@ -31,7 +31,7 @@ pub fn expect_expression<F>(reader: &mut TokenReader, f: F) -> ParserResult<Expr
     }
     else
     {
-        Err(ParserError::ExpectedExpression(reader.current()))    
+        Err(ParserError::ExpectedExpression(reader.current_loc()))    
     }
 }
 
@@ -110,14 +110,14 @@ fn parse_call_args(reader: &mut TokenReader, callee: Expression) -> ParserResult
         while !reader.current_is(&[TokenType::CloseParen])
         {
             let Some(expression) = parse_expression(reader)? else {
-                return Err(ParserError::ExpectedExpression(reader.current()));
+                return Err(ParserError::ExpectedExpression(reader.current_loc()));
             };
     
             args.push(expression);
     
             if !reader.current_is(&[TokenType::CloseParen, TokenType::Comma])
             {
-                return Err(ParserError::ExpectedToken(TokenType::CloseParen, reader.current()));
+                return Err(ParserError::ExpectedToken(TokenType::CloseParen, reader.current_loc()));
             }
     
             let _ = reader.check(TokenType::Comma); // makes sure to skip the comma
@@ -187,13 +187,17 @@ fn parse_primary(reader: &mut TokenReader) -> ParserResult<Option<Expression>>
         TokenType::IntegerLiteral,
         TokenType::StringLiteral,
         TokenType::FloatLiteral,
-        TokenType::Identifier,
         TokenType::SelfVal,
         TokenType::True,
         TokenType::False,
+        TokenType::Null,
     ])
     {
         Ok(Some(Expression::Literal(literal)))
+    }
+    else if let Some(identifier) = reader.check(TokenType::Identifier)
+    {
+        Ok(Some(Expression::Identifier(identifier)))
     }
     else 
     {
@@ -206,7 +210,7 @@ fn parse_construction_arg(reader: &mut TokenReader) -> ParserResult<Construction
     let name = reader.expect(TokenType::Identifier)?;
     let colon = reader.expect(TokenType::Colon)?;
     let Some(initializer) = parse_expression(reader)? else {
-        return Err(ParserError::ExpectedExpression(reader.current()));
+        return Err(ParserError::ExpectedExpression(reader.current_loc()));
     };
 
     Ok(ConstructionArg { 
@@ -232,7 +236,7 @@ fn parse_construction_expression(reader: &mut TokenReader) -> ParserResult<Optio
         
                 if !reader.current_is(&[TokenType::CloseBrace, TokenType::Comma])
                 {
-                    return Err(ParserError::ExpectedToken(TokenType::CloseBrace, reader.current()));
+                    return Err(ParserError::ExpectedToken(TokenType::CloseBrace, reader.current_loc()));
                 }
         
                 let _ = reader.check(TokenType::Comma); // makes sure to skip the comma
@@ -256,7 +260,7 @@ fn parse_construction_expression(reader: &mut TokenReader) -> ParserResult<Optio
 
 fn parse_type_value(reader: &mut TokenReader) -> ParserResult<Option<Expression>>
 {
-    if let Some(offset) = is_type(reader)
+    if let Some(offset) = is_type_and(reader, |t| !t.is_identifier())
     {
         if reader.peek_is(offset, TokenType::Dot)
         {
@@ -303,14 +307,14 @@ fn parse_array_literal(reader: &mut TokenReader) -> ParserResult<Option<Expressi
         while !reader.current_is(&[TokenType::CloseBracket])
         {
             let Some(expression) = parse_expression(reader)? else {
-                return Err(ParserError::ExpectedExpression(reader.current()));
+                return Err(ParserError::ExpectedExpression(reader.current_loc()));
             };
     
             expressions.push(expression);
     
             if !reader.current_is(&[TokenType::CloseBracket, TokenType::Comma])
             {
-                return Err(ParserError::ExpectedToken(TokenType::CloseBracket, reader.current()));
+                return Err(ParserError::ExpectedToken(TokenType::CloseBracket, reader.current_loc()));
             }
     
             let _ = reader.check(TokenType::Comma); // makes sure to skip the comma
@@ -336,7 +340,7 @@ fn parse_grouping(reader: &mut TokenReader) -> ParserResult<Option<Expression>>
     if let Some(open_paren) = reader.check(TokenType::OpenParen)
     {
         let Some(expression) = parse_expression(reader)? else {
-            return Err(ParserError::ExpectedExpression(reader.current()))
+            return Err(ParserError::ExpectedExpression(reader.current_loc()))
         };
         let expression = Box::new(expression);
 
@@ -381,14 +385,14 @@ fn parse_lambda_params(reader: &mut TokenReader) -> ParserResult<LambdaParams>
     while reader.check(TokenType::Pipe).is_none()
     {
         let Some(param) = parse_lambda_param(reader)? else {
-            return Err(ParserError::ExpectedALambdaParameter(reader.current()));
+            return Err(ParserError::ExpectedALambdaParameter(reader.current_loc()));
         };
 
         parameters.push(param);
 
         if !reader.current_is(&[TokenType::Pipe, TokenType::Comma])
         {
-            return Err(ParserError::ExpectedToken(TokenType::Pipe, reader.current()));
+            return Err(ParserError::ExpectedToken(TokenType::Pipe, reader.current_loc()));
         }
 
         let _ = reader.check(TokenType::Comma); // makes sure to skip the comma
@@ -400,7 +404,7 @@ fn parse_lambda_params(reader: &mut TokenReader) -> ParserResult<LambdaParams>
     let return_type = if arrow.is_some() 
     { 
         let Some(type_name) = parse_type_name(reader)? else {
-            return Err(ParserError::ExpectedType(reader.current()))
+            return Err(ParserError::ExpectedType(reader.current_loc()))
         };
 
         Some(type_name)
@@ -425,7 +429,7 @@ fn parse_lambda_body(reader: &mut TokenReader) -> ParserResult<LambdaBody>
     }
     else 
     {
-        Err(ParserError::ExpectedALambdaBody(reader.current()))    
+        Err(ParserError::ExpectedALambdaBody(reader.current_loc()))    
     }
 }
 

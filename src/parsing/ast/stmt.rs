@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use either::Either;
 
-use crate::lexing::token::Token;
+use crate::{lexing::token::Token, utils::FileInfo};
 
 use super::{Expression, TypeName};
 
@@ -48,7 +48,7 @@ pub struct ConstStmt
 #[derive(Debug, Clone)]
 pub struct AssignStmt
 {
-    pub value: Expression,
+    pub assigned: Box<Expression>,
     pub equal: Token,
     pub expression: Expression,
     pub semi_colon: Token,
@@ -86,7 +86,7 @@ pub struct FnParam
     pub id: Token,
     pub colon: Token,
     pub type_name: TypeName,
-    pub default_value: Option<(Token, Expression)>
+    pub default_value: Option<(Token, Arc<Expression>)>
 }
 
 #[derive(Debug, Clone)]
@@ -101,16 +101,16 @@ pub struct FnDecl
     pub params: Vec<FnParam>,
     pub close_paren: Token,
     pub return_type: Option<(Token, TypeName)>,
-    pub body: BlockStmt, // either has a body or a ';'
+    pub body: Arc<BlockStmt>, // either has a body or a ';'
 }
 
 #[derive(Debug, Clone)]
-pub struct StructMember
+pub struct StructDeclMember
 {
     pub id: Token,
     pub colon: Token,
     pub type_name: TypeName,
-    pub initializer: Option<(Token, Expression)>,
+    pub initializer: Option<(Token, Arc<Expression>)>,
 }
 
 #[derive(Debug, Clone)]
@@ -120,7 +120,7 @@ pub struct StructDecl
     pub struct_tok: Token,
     pub id: Token,
     pub open_brace: Token,
-    pub members: Vec<StructMember>,
+    pub members: Vec<StructDeclMember>,
     pub close_brace: Token,
 }
 
@@ -196,12 +196,14 @@ pub enum Declaration
 pub struct FileNode
 {
     pub usings: Vec<UseStmt>,
+    pub using_paths: Vec<Vec<String>>,
     pub declarations: Vec<Declaration>,
     pub eof: Token,
+    pub info: Arc<FileInfo>,
 }
 
 #[derive(Debug)]
 pub struct Program
 {
-    pub files: Vec<FileNode>,
+    pub files: Vec<Arc<FileNode>>,
 }

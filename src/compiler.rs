@@ -1,44 +1,74 @@
-use crate::{lexing::{self, token::{Token, TokenType}}, parsing::{self, ast::FileNode, ParserError}, utils::TextPos};
+use std::{collections::HashMap, fmt::format, sync::Arc};
+
+use uuid::Uuid;
+
+use crate::{lexing::{self, token::{Token, TokenType}}, parsing::{self, ast::{BlockStmt, Expression, FileNode}, token_reader::TokenReader, ParserError}, utils::{FileInfo, PathInfo, TextLoc, TextPos}};
 
 pub trait CompilerError
 {
     fn msg(&self) -> String;
-    fn pos(&self) -> Option<TextPos>;
+    fn loc(&self) -> Option<TextLoc>;
 
-    fn format_error(&self, text: &[char], file: Option<&str>) -> String 
+    fn format_error(&self) -> String 
     {
-        let loc = self.pos().map(|p| p.get_loc(text).to_string()).unwrap_or("None".into());
-        match &file {
-            Some(file) => format!("[{}:{}]: {}", file.to_string(), loc, self.msg()),
-            None => format!("[{}]: \"{}\"", loc, self.msg())
+        match self.loc()
+        {
+            Some(loc) => format!("[{}]: {}", loc, self.msg()),
+            None => format!("{}", self.msg())
         }
     }
 }
 
-pub fn run_lexer(text: &[char], file: Option<&str>) -> Result<Vec<Token>, Vec<String>>
+pub fn run_lexer(file: &FileInfo) -> Result<Vec<Token>, Vec<String>>
 {
-    match lexing::lex_text(text)
+    match lexing::lex_text(file)
     {
         Ok(ok) => Ok(ok),
         Err(err) => {
-            Err(err.iter().map(|e| e.format_error(text, file)).collect())
+            Err(err.iter().map(|e| e.format_error()).collect())
         },
     }
 }
 
-pub fn run_parser(text: &[char], file: Option<&str>) -> Result<FileNode, Vec<String>>
+pub fn run_parser(file: Arc<FileInfo>) -> Result<FileNode, Vec<String>>
 {
-    let tokens = run_lexer(text, file)?;
+    let tokens = run_lexer(&file)?;
 
-    match parsing::parse_file(&tokens)
+    match parsing::parse_file(&tokens, file.clone())
     {
         Ok(Some(ok)) => Ok(ok),
         Ok(None) => {
-            let error = ParserError::ExpectedToken(TokenType::EOF, None).format_error(text, file);
+            let error = ParserError::ExpectedToken(TokenType::EOF, TextPos::uniform(0).get_loc(&file)).format_error();
             Err(vec![error])
         }
         Err(err) => {
-            Err(err.iter().map(|e| e.format_error(text, file)).collect())
+            Err(err.iter().map(|e| e.format_error()).collect())
+        }
+    }
+}
+
+pub fn run_expression_parser(file: &FileInfo) -> Result<Expression, Vec<String>>
+{
+    let tokens = run_lexer(file)?;
+    let mut reader = TokenReader::new(&tokens, file, None);
+    match parsing::expect_expression(&mut reader, parsing::parse_expression)
+    {
+        Ok(ok) => Ok(ok),
+        Err(err) => {
+            Err(vec![err.format_error()])
+        }
+    }
+}
+
+pub fn run_block_parser(file: &FileInfo) -> Result<BlockStmt, Vec<String>>
+{
+    let tokens = run_lexer(file)?;
+    let mut reader = TokenReader::new(&tokens, file, None);
+    match parsing::expect_block_stmt(&mut reader)
+    {
+        Ok(ok) => Ok(ok),
+        Err(err) => {
+            Err(vec![err.format_error()])
         }
     }
 }

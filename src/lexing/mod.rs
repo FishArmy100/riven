@@ -1,8 +1,9 @@
 use char_reader::CharReader;
 use keywords::KEYWORDS;
 use token::{Token, TokenType, TokenValue};
+use uuid::Uuid;
 
-use crate::{compiler::CompilerError, utils::TextPos};
+use crate::{compiler::CompilerError, utils::{FileInfo, TextLoc, TextPos}};
 
 pub mod keywords;
 pub mod token;
@@ -11,45 +12,36 @@ pub mod char_reader;
 #[derive(Debug, Clone)]
 pub enum LexerError 
 {
-    UnknownToken
-    {
-        token: char,
-        index: usize,
-    },
-    UnterminatedString
-    {
-        index: usize,
-    }
+    UnknownToken(char, TextLoc),
+    UnterminatedString(TextLoc),
 }
 
 impl CompilerError for LexerError
 {
-    fn pos(&self) -> Option<TextPos> 
+    fn loc(&self) -> Option<TextLoc>
     {
-        let pos = match self 
+        match self 
         {
-            Self::UnknownToken { token: _, index } => TextPos::uniform(*index),
-            Self::UnterminatedString { index } => TextPos::uniform(*index),
-        };
-
-        Some(pos)
+            Self::UnknownToken(_, loc) => Some(loc.clone()),
+            Self::UnterminatedString(loc) => Some(loc.clone()),
+        }
     }
 
     fn msg(&self) -> String 
     {
         match self 
         {
-            LexerError::UnknownToken { token, index: _ } => format!("Unknown token {}", token),
-            LexerError::UnterminatedString { index: _ } => format!("Unterminated string"),
+            LexerError::UnknownToken(c, _) => format!("Unknown token {}", c),
+            LexerError::UnterminatedString(_) => format!("Unterminated string"),
         }
     }
 }
 
 pub type LexerResult = Result<Vec<Token>, Vec<LexerError>>;
 
-pub fn lex_text(text: &[char]) -> LexerResult
+pub fn lex_text(file: &FileInfo) -> LexerResult
 {
-    let mut reader = CharReader::new(text);
+    let mut reader = CharReader::new(&file.chars);
 
     let mut tokens = vec![];
     let mut errors = vec![];
@@ -72,7 +64,7 @@ pub fn lex_text(text: &[char]) -> LexerResult
         {
             tokens.push(identifier);
         }
-        else if let Some(literal) = check_string_literal(&mut reader)
+        else if let Some(literal) = check_string_literal(&mut reader, file)
         {
             match literal
             {
@@ -86,10 +78,10 @@ pub fn lex_text(text: &[char]) -> LexerResult
         }
         else 
         {
-            errors.push(LexerError::UnknownToken { 
-                token: reader.advance().unwrap(), 
-                index: reader.index() 
-            });
+            let loc = TextPos::uniform(reader.index()).get_loc(file);
+            let c = reader.advance().unwrap();
+
+            errors.push(LexerError::UnknownToken(c, loc));
         }
     }
 
@@ -322,7 +314,11 @@ pub fn check_identifier(reader: &mut CharReader) -> Option<Token>
             _ => None,
         };
 
-        Some(Token { pos: TextPos { begin, end }, token_type, value })
+        Some(Token { 
+            pos: TextPos { begin, end }, 
+            token_type, 
+            value
+        })
     }
     else 
     {
@@ -330,7 +326,7 @@ pub fn check_identifier(reader: &mut CharReader) -> Option<Token>
     }
 }
 
-pub fn check_string_literal(reader: &mut CharReader) -> Option<Result<Token, LexerError>> 
+pub fn check_string_literal(reader: &mut CharReader, file: &FileInfo) -> Option<Result<Token, LexerError>> 
 {
     if !reader.current().is_some_and(|c| c == '\"') { return None };
 
@@ -354,12 +350,13 @@ pub fn check_string_literal(reader: &mut CharReader) -> Option<Result<Token, Lex
         Some(Ok(Token { 
             pos: TextPos { begin, end }, 
             token_type: TokenType::StringLiteral, 
-            value: Some(TokenValue::String(text)) 
+            value: Some(TokenValue::String(text))
         }))
     }
     else 
     {
-        Some(Err(LexerError::UnterminatedString { index: begin }))
+        let loc = TextPos::new(begin, reader.index()).get_loc(file);
+        Some(Err(LexerError::UnterminatedString(loc)))
     }
 }
 
@@ -419,6 +416,6 @@ pub fn make_token(reader: &mut CharReader, length: usize, token_type: TokenType)
             end
         }, 
         token_type, 
-        value: None 
+        value: None
     }
 }

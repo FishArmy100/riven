@@ -1,0 +1,8 @@
+
+
+
+fn main()
+{
+    let str = "5";
+    let i: ?Int = str.to_int();
+}

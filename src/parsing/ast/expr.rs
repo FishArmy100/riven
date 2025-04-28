@@ -40,6 +40,38 @@ pub struct LambdaExpr
     pub body: LambdaBody
 }
 
+impl LambdaExpr
+{
+    pub fn get_pos(&self) -> TextPos
+    {
+        match &self.params
+        {
+            LambdaParams::Simple(token) => 
+            {
+                token.pos + self.body.as_ref()
+                    .map_either(|a| a.get_pos(), |b| b.open_brace.pos + b.close_brace.pos)
+                    .either_into()
+            },
+            LambdaParams::Complex { open_pipe, parameters: _, close_pipe: _, arrow: _, return_type: _ } => 
+            {
+                open_pipe.pos + self.body.as_ref()
+                    .map_either(|a| a.get_pos(), |b| b.open_brace.pos + b.close_brace.pos)
+                    .either_into()
+            },
+            LambdaParams::Empty { pipes, return_type } => 
+            {
+                let mut pos = pipes.pos;
+                if let Some((colon, ret)) = return_type
+                {
+                    pos = pos + colon.pos + ret.get_pos()
+                }
+
+                pos
+            },
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct CallExpr
 {
@@ -155,33 +187,7 @@ impl Expression
     {
         match self 
         {
-            Expression::Lambda(lambda_expr) => {
-                match &lambda_expr.params
-                {
-                    LambdaParams::Simple(token) => 
-                    {
-                        token.pos + lambda_expr.body.as_ref()
-                            .map_either(|a| a.get_pos(), |b| b.open_brace.pos + b.close_brace.pos)
-                            .either_into()
-                    },
-                    LambdaParams::Complex { open_pipe, parameters: _, close_pipe: _, arrow: _, return_type: _ } => 
-                    {
-                        open_pipe.pos + lambda_expr.body.as_ref()
-                            .map_either(|a| a.get_pos(), |b| b.open_brace.pos + b.close_brace.pos)
-                            .either_into()
-                    },
-                    LambdaParams::Empty { pipes, return_type } => 
-                    {
-                        let mut pos = pipes.pos;
-                        if let Some((colon, ret)) = return_type
-                        {
-                            pos = pos + colon.pos + ret.get_pos()
-                        }
-
-                        pos
-                    },
-                }
-            },
+            Expression::Lambda(lambda_expr) => lambda_expr.get_pos(),
             Expression::Literal(token) => token.pos,
             Expression::ArrayLiteral(lit) => lit.open_bracket.pos + lit.close_bracket.pos,
             Expression::Identifier(token) => token.pos,
