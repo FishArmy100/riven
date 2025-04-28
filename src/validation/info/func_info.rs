@@ -79,9 +79,12 @@ impl FuncInfo
         if let Some((_, TypeName::Identifier(id))) = &decl.type_name // check if this is a struct type
         {
             let id = resolver.resolve_result(id, &file).unwrap();
-            if structs.get(&id).unwrap().members().contains_key(&name) // the struct has a member of the same name
+            if let Some(info) = structs.get(&id) // if the type doesn't exist, will be propagated by previous step
             {
-                return Err(TypeError::DuplicateMemberFunc(decl.id.get_loc(&file.info)));
+                if info.members().contains_key(&name) // the struct has a member of the same name
+                {
+                    return Err(TypeError::DuplicateMemberFunc(decl.id.get_loc(&file.info)));
+                }
             }
         }
 
