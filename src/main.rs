@@ -9,6 +9,7 @@ pub mod parsing;
 pub mod validation;
 pub mod transpiling;
 pub mod lua_runtime;
+pub mod config;
 
 fn main() 
 {
