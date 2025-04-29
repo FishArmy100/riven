@@ -39,7 +39,7 @@ impl InfoContext
         
         let all_types = type_resolver.type_ids();
         let built_in_funcs = builtins::get_builtin_funcs(&all_types);
-        let mut func_resolver = FuncResolver::new(&built_in_funcs.funcs);
+        let mut func_resolver = FuncResolver::new(&built_in_funcs);
 
         for file in &program.files
         {
@@ -56,7 +56,7 @@ impl InfoContext
         }
         
         let mut funcs = HashMap::new();
-        for b in &built_in_funcs.funcs
+        for b in &built_in_funcs
         {
             funcs.insert(b.id.clone(), b.clone());
         }
@@ -302,10 +302,15 @@ impl FuncResolver
     pub fn resolve(&self, type_info: Option<TypeInfo>, token: &Token, file: &FileNode) -> FuncResolverResult
     {
         let name = token.value_string().unwrap();
-        let possible = file.using_paths.iter()
+        let mut possible = file.using_paths.iter()
             .filter_map(|u| self.map.get(u))
-            .filter_map(|file| file.get(&(type_info.clone(), name.clone())))
+            .filter_map(|file| file.get(&(type_info.clone(), name.clone())).cloned())
             .collect_vec();
+
+        if let Some(b) = builtins::resolve_builtin_member_funcs(type_info.as_ref(), name)
+        {
+            possible.push(b);
+        }
 
         
         if possible.len() == 1

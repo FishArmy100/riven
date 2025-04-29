@@ -1,3 +1,5 @@
+use lua_runtime::run_lua;
+use transpiling::{lua_ast::{LuaExpr, LuaLit, LuaProgram, LuaStmt}, transpile};
 use utils::{write_file, FileInfo};
 
 pub mod lexing;
@@ -6,22 +8,36 @@ pub mod compiler;
 pub mod parsing;
 pub mod validation;
 pub mod transpiling;
+pub mod lua_runtime;
 
 fn main() 
 {
-    let file = FileInfo::read("tests/tick-tack-toe.rvn", "src").unwrap().as_arc();
-    match compiler::run_validator(&[file])
+    let file = FileInfo::read("tests/test.rvn", "src").unwrap().as_arc();
+    let program = match compiler::run_validator(&[file])
     {
-        Ok(ok) => {
-            println!("Program compiled successfully!");
-            write_file("out/checked.txt", &format!("{:#?}", ok)).unwrap()
-        },
+        Ok(ok) => ok,
         Err(errs) => {
             println!("Program compiled with errors:");
             for e in errs
             {
                 println!(" - {}", e)
             }
+            return;
         },
-    }
+    };
+
+    
+    write_file("out/test.ast", &format!("{:#?}", program)).unwrap();
+    
+    // let lua_program = transpile(program);
+
+    // let lua = lua_program.to_string("\t".into());
+    // write_file("out/lua_test.lua", &lua).unwrap();
+    // match run_lua(&lua)
+    // {
+    //     Err(e) => {
+    //         println!("{}", e.to_string())
+    //     }
+    //     Ok(_) => {},
+    // }
 }

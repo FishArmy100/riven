@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::{Arc, Mutex}};
+use std::{borrow::Cow, collections::HashMap, sync::{Arc, Mutex}};
 
 use either::Either::{Left, Right};
 use itertools::Itertools;
@@ -9,11 +9,22 @@ use crate::{
     parsing::ast::{AccessExpr, ArrayLiteral, BinaryExpr, CallExpr, CastExpr, ConstructionArg, ConstructionExpr, Expression, FileNode, IndexExpr, LambdaExpr, LambdaParams, UnaryExpr}, 
     utils::{FileInfo, Shared, TextLoc, TextPos}, 
     validation::{
-        builtins::{BOOL_TYPE, FLOAT_TYPE, INT_TYPE, STRING_TYPE, VOID_TYPE}, defs::var_def::VariableStack, info::{struct_info::StructInfo, types::TypeInfo, FuncResolverResult, InfoContext}, operators::{BinaryOpType, GlobalOperators, UnaryOpType}, TypeError
+        builtins::{self, BOOL_TYPE, FLOAT_TYPE, INT_TYPE, STRING_TYPE, VOID_TYPE}, defs::{func_def::FuncDef, var_def::VariableStack}, info::{func_info::FuncInfo, struct_info::StructInfo, types::TypeInfo, FuncResolverResult, InfoContext}, operators::{BinaryOpType, GlobalOperators, UnaryOpType}, TypeError
     }
 };
 
 use super::stmt::{StmtCheckArgs, TypedStatement};
+
+#[derive(Debug, Clone)]
+pub enum LitVal
+{
+    String(String),
+    Int(i64),
+    Float(f64),
+    Bool(bool),
+    Null,
+    SelfVal,
+}
 
 #[derive(Debug)]
 pub enum TypedIdentifier
@@ -27,6 +38,7 @@ pub enum TypedExpression
 {
     Literal
     {
+        value: LitVal,
         returned: TypeInfo,
         loc: TextLoc,
     },
@@ -158,6 +170,11 @@ impl<'a> ExprCheckArgs<'a>
             loop_stack: self.loop_stack.clone(),
         }
     }
+
+    pub fn get_func(&self, parent: Option<&TypeInfo>, id: &Uuid) -> Option<Cow<'a, FuncInfo>>
+    {
+        self.context.funcs.get(id).map(|f| Cow::Borrowed(f)).or(builtins::get_builtin_member_func(parent, id).map(|c| Cow::Owned(c)))
+    }
 }
 
 impl TypedExpression 
@@ -171,7 +188,11 @@ impl TypedExpression
                     let loc = token.get_loc(&args.file.info);
                     return match expected
                     {
-                        Some(s) => Ok(TypedExpression::Literal { returned: s.clone(), loc }),
+                        Some(s) => Ok(TypedExpression::Literal { 
+                            returned: s.clone(), 
+                            loc,
+                            value: LitVal::Null,
+                        }),
                         None => Err(TypeError::CannotInferExpression(loc))
                     }
                 }
@@ -180,22 +201,27 @@ impl TypedExpression
                     let loc = token.get_loc(&args.file.info);
                     return match args.self_type
                     {
-                        Some(s) => Ok(TypedExpression::Literal { returned: s.clone(), loc }),
+                        Some(s) => Ok(TypedExpression::Literal { 
+                            returned: s.clone(), 
+                            loc,
+                            value: LitVal::SelfVal,
+                        }),
                         None => Err(TypeError::CannotInferExpression(loc))
                     }
                 }
 
-                let returned = match token.value.as_ref().unwrap()
+                let (returned, value) = match token.value.as_ref().unwrap()
                 {
-                    TokenValue::String(_) => STRING_TYPE.clone(),
-                    TokenValue::Int(_) => INT_TYPE.clone(),
-                    TokenValue::Float(_) => FLOAT_TYPE.clone(),
-                    TokenValue::Bool(_) => BOOL_TYPE.clone(),
+                    TokenValue::String(s) => (STRING_TYPE.clone(), LitVal::String(s.clone())),
+                    TokenValue::Int(i) => (INT_TYPE.clone(), LitVal::Int(*i)),
+                    TokenValue::Float(f) => (FLOAT_TYPE.clone(), LitVal::Float(*f)),
+                    TokenValue::Bool(b) => (BOOL_TYPE.clone(), LitVal::Bool(*b)),
                 };
 
                 Ok(TypedExpression::Literal { 
                     returned, 
-                    loc: token.get_loc(&args.file.info)
+                    loc: token.get_loc(&args.file.info),
+                    value
                 })
             },
             Expression::ArrayLiteral(ArrayLiteral { open_bracket, expressions, close_bracket }) => {
@@ -373,7 +399,7 @@ impl TypedExpression
                         let type_info = TypeInfo::Primary(type_info_id);
                         
                         let func_id = args.context.func_resolver.resolve(Some(type_info.clone()), identifier, args.file).to_result(&args.file.info)?;
-                        let func_info = args.context.funcs.get(&func_id).unwrap();
+                        let func_info = args.get_func(None, &func_id).unwrap();
 
                         return Ok(Self::TypeAccess { 
                             accessed: Box::new(type_info), 
@@ -447,7 +473,7 @@ impl TypedExpression
                 let res_id = args.resolve_name(id)?;
 
                 let returned = match &res_id {
-                    TypedIdentifier::Function(id) => args.context.funcs.get(id).unwrap().get_type_info(),
+                    TypedIdentifier::Function(id) => args.get_func(None, id).unwrap().get_type_info(),
                     TypedIdentifier::Variable(id) => args.var_stack.get().get_var(id).type_info.clone(),
                 };
                 
@@ -464,18 +490,18 @@ impl TypedExpression
                 };
 
                 if let TypedExpression::Identifier { id: TypedIdentifier::Function(id), returned: _, loc: _ } = &expr {
-                    let def = args.context.funcs.get(id).unwrap();
-                    let param_count = def.parameters.len();
+                    let info = args.get_func(None, id).unwrap();
+                    let param_count = info.parameters.len();
 
                     if call_args.len() > param_count
                     {
-                        return throw_error(def.parameters.iter().map(|p| p.type_info.clone()).collect());
+                        return throw_error(info.parameters.iter().map(|p| p.type_info.clone()).collect());
                     }
 
                     let mut checked_args = vec![];
                     for i in 0..param_count
                     {
-                        let p = &def.parameters[i];
+                        let p = &info.parameters[i];
                         if p.init.is_some() && i == call_args.len()
                         {
                             break;
@@ -483,7 +509,7 @@ impl TypedExpression
 
                         if call_args.len() <= i 
                         {
-                            return throw_error(def.parameters.iter().map(|p| p.type_info.clone()).collect());
+                            return throw_error(info.parameters.iter().map(|p| p.type_info.clone()).collect());
                         }
 
                         let a = TypedExpression::check_expr(&call_args[i], args, Some(&p.type_info))?;
@@ -493,7 +519,7 @@ impl TypedExpression
                     return Ok(TypedExpression::Call { 
                         called: Box::new(expr), 
                         args: checked_args,
-                        returned: def.returned.clone(),
+                        returned: info.returned.clone(),
                         loc
                     });
                 }
@@ -557,7 +583,7 @@ impl TypedExpression
     {
         match self 
         {
-            TypedExpression::Literal { returned, loc: _ } => returned,
+            TypedExpression::Literal { returned, loc: _, value: _ } => returned,
             TypedExpression::Binary { left: _, op: _, right: _, returned, loc: _ } => returned,
             TypedExpression::Unary { operand: _, op: _, returned, loc: _ } => returned,
             TypedExpression::Call { called: _, args: _, returned, loc: _ } => returned,
@@ -576,7 +602,7 @@ impl TypedExpression
     {
         match self 
         {
-            TypedExpression::Literal { returned: _, loc } => loc,
+            TypedExpression::Literal { returned: _, loc, value: _ } => loc,
             TypedExpression::Binary { left: _, op: _, right: _, returned: _, loc } => loc,
             TypedExpression::Unary { operand: _, op: _, returned: _, loc } => loc,
             TypedExpression::Call { called: _, args: _, returned: _, loc } => loc,
@@ -646,14 +672,14 @@ fn eval_access(accessed: &TypeInfo, name: &Token, args: &ExprCheckArgs) -> Resul
 {
     if let FuncResolverResult::Ok(ok) = args.context.func_resolver.resolve(Some(accessed.clone()), name, args.file)
     {
-        let func_def = args.context.funcs.get(&ok).unwrap();
-        if !func_def.has_self
+        let func_info = args.get_func(Some(accessed), &ok).unwrap();
+        if !func_info.has_self
         {
             return Err(TypeError::CallingStaticFunctionOnNot(name.get_loc(&args.file.info)));
         }
         
-        let params = func_def.parameters[1..].iter().map(|p| p.type_info.clone()).collect_vec();
-        let ret = Box::new(func_def.returned.clone());
+        let params = func_info.parameters[1..].iter().map(|p| p.type_info.clone()).collect_vec();
+        let ret = Box::new(func_info.returned.clone());
         return Ok(Some((TypeInfo::Function { args: params, returned: ret }, false)));
     }
 

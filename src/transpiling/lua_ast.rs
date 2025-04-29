@@ -168,7 +168,7 @@ impl LuaExpr
                 format_args.indent += 1;
                 for s in body.iter()
                 {
-                    str += &s.to_string(format_args);
+                    str += &format!("{}", s.to_string(format_args));
                 }
                 format_args.indent -= 1;
                 str += &format!("{}end", format_args.get_tab());
@@ -186,6 +186,11 @@ impl LuaExpr
                 str
             },
         }
+    }
+
+    pub fn to_box(self) -> Box<Self>
+    {
+        Box::new(self)
     }
 }
 
@@ -228,6 +233,8 @@ pub enum LuaStmt
     },
     Return(Option<Box<LuaExpr>>),
     Break,
+    Spacer,
+    Comment(String)
 }
 
 impl LuaStmt
@@ -276,21 +283,55 @@ impl LuaStmt
                     str += &s.to_string(fmt_args);
                 }
                 fmt_args.indent -= 1;
-                str += &format!("{}end", fmt_args.get_tab());
+                str += &format!("{}end\n\n", fmt_args.get_tab());
                 str
             },
             LuaStmt::Label(l) => format!("{}::{}::\n", fmt_args.get_tab(), l),
-            LuaStmt::Goto { label } => format!("{}goto {}", fmt_args.get_tab(), label),
+            LuaStmt::Goto { label } => format!("{}goto {}\n", fmt_args.get_tab(), label),
             LuaStmt::Return(lua_expr) => match lua_expr {
-                Some(expr) => format!("{}return {}", fmt_args.get_tab(), expr.to_string(fmt_args)),
+                Some(expr) => format!("{}return {}\n", fmt_args.get_tab(), expr.to_string(fmt_args)),
                 None => format!("{}return\n", fmt_args.get_tab()),
             },
             LuaStmt::Break => format!("{}break\n", fmt_args.get_tab()),
             LuaStmt::Call { expr, args } => {
                 let args = args.iter().map(|a| a.to_string(fmt_args)).join(", ");
                 let expr = expr.to_string(fmt_args);
-                format!("{}({})\n", expr, args)
+                format!("{}{}({})\n", fmt_args.get_tab(), expr, args)
             },
+            LuaStmt::Spacer => "\n".into(),
+            LuaStmt::Comment(msg) => {
+                let mut str = String::new();
+                for line in msg.split('\n') 
+                {
+                    str += &format!("{}-- {}\n", fmt_args.get_tab(), line);
+                }
+
+                str
+            }
         }
+    }
+}
+
+pub struct LuaProgram
+{
+    pub stmts: Vec<LuaStmt>
+}
+
+impl LuaProgram
+{
+    pub fn to_string(&self, tab: String) -> String
+    {
+        let mut format_args = LuaFormatArgs {
+            tab,
+            indent: 0,
+        };
+
+        let mut str = String::new();
+        for s in &self.stmts
+        {
+            str += &s.to_string(&mut format_args);
+        }
+
+        str
     }
 }

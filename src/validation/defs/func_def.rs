@@ -6,7 +6,7 @@ use crate::{parsing::ast::FileNode, utils::{Shared, TextLoc}, validation::{ast::
 
 use super::var_def::VarDef;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FuncDef 
 {
     pub id: Uuid,
@@ -24,13 +24,14 @@ pub struct FuncDefParam
     pub name: String,
     pub type_info: TypeInfo,
     pub init: Option<Arc<TypedExpression>>,
+    pub id: Uuid,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FuncDefBody
 {
     pub vars: HashMap<Uuid, VarDef>,
-    pub block: Box<TypedStatement>,
+    pub block: Arc<TypedStatement>,
 }
 
 impl FuncDef
@@ -51,7 +52,7 @@ impl FuncDef
                     name: info.name.clone(), 
                     is_pub: info.is_pub, 
                     returned: info.returned.clone(), 
-                    params: info.parameters.iter().map(|p| FuncDefParam { name: p.name.clone(), type_info: p.type_info.clone(), init: None }).collect(), 
+                    params: info.parameters.iter().map(|p| FuncDefParam { name: p.name.clone(), type_info: p.type_info.clone(), init: None, id: Uuid::new_v4() }).collect(), 
                     body: None,
                     name_loc: None,
                 })
@@ -93,6 +94,7 @@ impl FuncDef
                 name: param.name.clone(),
                 type_info: param.type_info.clone(),
                 init,
+                id: param.id.clone(),
             });
         }
 
@@ -131,7 +133,7 @@ impl FuncDef
 
                 let body = FuncDefBody {
                     vars: body_var_stack.get().get_vars(),
-                    block: Box::new(ok),
+                    block: Arc::new(ok),
                 };
 
                 Some(body)
