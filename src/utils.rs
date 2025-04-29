@@ -279,3 +279,11 @@ impl<T> Clone for Shared<T>
         Self(self.0.clone())
     }
 }
+
+pub fn has_valid_extension(filename: &str, required_ext: &str) -> bool 
+{
+    Path::new(filename)
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map_or(false, |ext_str| ext_str == required_ext)
+}

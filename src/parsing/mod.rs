@@ -66,7 +66,7 @@ impl CompilerError for ParserError
 
 pub type ParserResult<T> = Result<T, ParserError>;
 
-pub fn parse_file(tokens: &Vec<Token>, file: Arc<FileInfo>) -> Result<Option<FileNode>, Vec<ParserError>>
+pub fn parse_file(tokens: &Vec<Token>, file: Arc<FileInfo>) -> Result<FileNode, Vec<ParserError>>
 {
     let mut reader = TokenReader::new(tokens, &file, None);
     let mut usings = vec![];
@@ -122,13 +122,13 @@ pub fn parse_file(tokens: &Vec<Token>, file: Arc<FileInfo>) -> Result<Option<Fil
     using_paths.push(vec![]);
     using_paths.push(file.path.split_relative());
 
-    Ok(Some(FileNode {
+    Ok(FileNode {
         usings, 
         using_paths,
         declarations, 
         eof,
         info: file,
-    }))
+    })
 }
 
 fn expect_ast_item<P, R, E>(reader: &mut TokenReader, predicate: P, error: E) -> ParserResult<R>

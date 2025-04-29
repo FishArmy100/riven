@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{lexing::{self, token::{Token, TokenType}}, parsing::{self, ast::{BlockStmt, Expression, FileNode, Program}, token_reader::TokenReader, ParserError}, utils::{FileInfo, TextLoc, TextPos}, validation::CheckedProgram};
+use crate::{config::CompilerConfig, lexing::{self, token::{Token, TokenType}, LexerError, LexerResult}, parsing::{self, ast::{BlockStmt, Expression, FileNode, Program}, token_reader::TokenReader, ParserError}, utils::{has_valid_extension, read_file, write_file, FileInfo, TextLoc, TextPos}, validation::CheckedProgram};
 
 pub trait CompilerError
 {
@@ -15,6 +15,36 @@ pub trait CompilerError
             None => format!("{}", self.msg())
         }
     }
+}
+
+pub fn compile_program(config: &CompilerConfig) -> Result<(), Vec<String>>
+{
+    if !has_valid_extension(&config.input_file, "rvn")
+    {
+        return Err(vec![format!("Invalid input file {}", config.input_file)])
+    }
+
+    let file_info = match FileInfo::read(&config.input_file, "src") {
+        Ok(ok) => ok,
+        Err(e) => return Err(vec![e])
+    };
+
+    let src = read_file(&config.input_file);
+
+    let tokens = match lexing::lex_text(&file_info) {
+        LexerResult::Ok(ok) => ok,
+        LexerResult::Err(e) => return Err(e.iter().map(|e| e.format_error()).collect()),
+    };
+
+    if config.debug_lex
+    {
+        write_file("out/tokens.txt", &format!("{:#?}", tokens));
+    }
+
+    let file_node = match parsing::parse_file(&tokens, Arc::new(file_info)) {
+        Ok(ok) => ok,
+        Err(err) => return Err(err.iter().map(|e| e.format_error()).collect())
+    };
 }
 
 pub fn run_lexer(file: &FileInfo) -> Result<Vec<Token>, Vec<String>>
@@ -34,11 +64,7 @@ pub fn run_parser(file: Arc<FileInfo>) -> Result<FileNode, Vec<String>>
 
     match parsing::parse_file(&tokens, file.clone())
     {
-        Ok(Some(ok)) => Ok(ok),
-        Ok(None) => {
-            let error = ParserError::ExpectedToken(TokenType::EOF, TextPos::uniform(0).get_loc(&file)).format_error();
-            Err(vec![error])
-        }
+        Ok(ok) => Ok(ok),
         Err(err) => {
             Err(err.iter().map(|e| e.format_error()).collect())
         }
