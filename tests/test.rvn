@@ -1,8 +1,13 @@
 
+struct Foo {}
+
+fn Foo.new() -> Foo 
+{
+    return Foo {};
+}
 
 
 fn main()
 {
-    let str = "5";
-    let i: ?Int = str.to_int();
+    let foo = Foo.new();
 }

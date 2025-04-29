@@ -6,7 +6,7 @@ use crate::{parsing::ast::FileNode, utils::{Shared, TextLoc}, validation::{ast::
 
 use super::var_def::VarDef;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FuncDef 
 {
     pub id: Uuid,
@@ -16,6 +16,7 @@ pub struct FuncDef
     pub params: Vec<FuncDefParam>,
     pub body: Option<FuncDefBody>,
     pub name_loc: Option<TextLoc>,
+    pub has_self: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -24,13 +25,14 @@ pub struct FuncDefParam
     pub name: String,
     pub type_info: TypeInfo,
     pub init: Option<Arc<TypedExpression>>,
+    pub id: Uuid,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FuncDefBody
 {
     pub vars: HashMap<Uuid, VarDef>,
-    pub block: Box<TypedStatement>,
+    pub block: Arc<TypedStatement>,
 }
 
 impl FuncDef
@@ -45,15 +47,16 @@ impl FuncDef
         let (decl, file) = match &info.decl_data
         {
             FuncDeclData::Decl { decl, file } => (decl, file),
-            FuncDeclData::Builtin => {
+            FuncDeclData::Builtin { has_self } => {
                 return Ok(Self { 
                     id: info.id.clone(), 
                     name: info.name.clone(), 
                     is_pub: info.is_pub, 
                     returned: info.returned.clone(), 
-                    params: info.parameters.iter().map(|p| FuncDefParam { name: p.name.clone(), type_info: p.type_info.clone(), init: None }).collect(), 
+                    params: info.parameters.iter().map(|p| FuncDefParam { name: p.name.clone(), type_info: p.type_info.clone(), init: None, id: Uuid::new_v4() }).collect(), 
                     body: None,
                     name_loc: None,
+                    has_self: *has_self,
                 })
             },
         };
@@ -93,6 +96,7 @@ impl FuncDef
                 name: param.name.clone(),
                 type_info: param.type_info.clone(),
                 init,
+                id: param.id.clone(),
             });
         }
 
@@ -131,7 +135,7 @@ impl FuncDef
 
                 let body = FuncDefBody {
                     vars: body_var_stack.get().get_vars(),
-                    block: Box::new(ok),
+                    block: Arc::new(ok),
                 };
 
                 Some(body)
@@ -154,7 +158,8 @@ impl FuncDef
             params, 
             body: Some(body.unwrap()),
             returned: info.returned.clone(),
-            name_loc: Some(decl.id.get_loc(&file.info ))
+            name_loc: Some(decl.id.get_loc(&file.info)),
+            has_self: info.has_self,
         })
     }
 }

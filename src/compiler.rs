@@ -1,8 +1,6 @@
-use std::{collections::HashMap, fmt::format, sync::Arc};
+use std::sync::Arc;
 
-use uuid::Uuid;
-
-use crate::{lexing::{self, token::{Token, TokenType}}, parsing::{self, ast::{BlockStmt, Expression, FileNode}, token_reader::TokenReader, ParserError}, utils::{FileInfo, PathInfo, TextLoc, TextPos}};
+use crate::{lexing::{self, token::{Token, TokenType}}, parsing::{self, ast::{BlockStmt, Expression, FileNode, Program}, token_reader::TokenReader, ParserError}, utils::{FileInfo, TextLoc, TextPos}, validation::CheckedProgram};
 
 pub trait CompilerError
 {
@@ -70,5 +68,35 @@ pub fn run_block_parser(file: &FileInfo) -> Result<BlockStmt, Vec<String>>
         Err(err) => {
             Err(vec![err.format_error()])
         }
+    }
+}
+
+pub fn run_validator(program: &[Arc<FileInfo>]) -> Result<CheckedProgram, Vec<String>>
+{
+    let mut errors = vec![];
+    let mut files = vec![];
+    for f in program.iter()
+    {
+        match run_parser(f.clone())
+        {
+            Ok(ok) => files.push(Arc::new(ok)),
+            Err(e) => errors.extend(e),
+        }
+    }
+
+    if errors.len() > 0
+    {
+        return Err(errors);
+    }
+
+    let program = Program {
+        files
+    };
+
+    let checked = CheckedProgram::new(&program);
+    match checked
+    {
+        Ok(ok) => Ok(ok),
+        Err(e) => Err(e.iter().map(|e| e.format_error()).collect())
     }
 }
