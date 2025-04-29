@@ -149,11 +149,18 @@ fn visit_func_def(context: &mut TranspileContext, def: &FuncDef) -> Option<LuaSt
     }
 
     let func_vars = def_body.vars.values()
-        .map(|var| (
-            context.resolver.borrow_mut().resolve(var.id.clone()), 
-            Box::new(LuaExpr::Literal(LuaLit::Nil)),
-            var.initializer.is_some(),
-        ))
+        .map(|var| {
+            let name = context.resolver.borrow_mut().resolve(var.id.clone());
+            (
+                name.clone(), 
+                LuaExpr::Binary { 
+                    left: LuaExpr::Id(name.clone()).to_box(), 
+                    op: LuaBinaryOp::Or, 
+                    right: LuaExpr::Literal(LuaLit::Nil).to_box() 
+                }.to_box(),
+                var.initializer.is_some(),
+            )
+        })
         .collect_vec();
 
     let func_body = if def_body.vars.values().find(|v| v.initializer.is_some()).is_some()
