@@ -2,7 +2,9 @@ use std::fmt::format;
 
 use itertools::Itertools;
 
-#[derive(Debug)]
+use crate::validation::operators::{BinaryOpType, UnaryOpType};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LuaBinaryOp
 {
     Add,
@@ -24,6 +26,29 @@ pub enum LuaBinaryOp
 
     And,
     Or,
+}
+
+impl LuaBinaryOp
+{
+    pub fn from_op(op: BinaryOpType) -> Self 
+    {
+        match op 
+        {
+            BinaryOpType::Plus => Self::Add,
+            BinaryOpType::Minus => Self::Sub,
+            BinaryOpType::Multiply => Self::Mul,
+            BinaryOpType::Divide => Self::Div,
+            BinaryOpType::Modulus => Self::Mod,
+            BinaryOpType::Equal => Self::Eq,
+            BinaryOpType::NotEqual => Self::NoEq,
+            BinaryOpType::GreaterThan => Self::Gr,
+            BinaryOpType::LessThan => Self::Lt,
+            BinaryOpType::GreaterThanEqual => Self::GtEq,
+            BinaryOpType::LessThanEqual => Self::LtEq,
+            BinaryOpType::And => Self::And,
+            BinaryOpType::Or => Self::Or,
+        }
+    }
 }
 
 impl std::fmt::Display for LuaBinaryOp
@@ -51,12 +76,24 @@ impl std::fmt::Display for LuaBinaryOp
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LuaUnaryOp
 {
     Not,
     Len,
     Neg,
+}
+
+impl LuaUnaryOp
+{
+    pub fn from_op(op: UnaryOpType) -> Self 
+    {
+        match op 
+        {
+            UnaryOpType::Negate => Self::Neg,
+            UnaryOpType::Invert => Self::Not,
+        }
+    }
 }
 
 impl std::fmt::Display for LuaUnaryOp
@@ -175,7 +212,7 @@ impl LuaExpr
                 str
             },
             LuaExpr::Map { members } => {
-                let mut str = "{".to_string();
+                let mut str = "{\n".to_string();
                 format_args.indent += 1;
                 for (name, expr) in members.iter()
                 {

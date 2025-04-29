@@ -29,10 +29,10 @@ fn main()
     
     write_file("out/test.ast", &format!("{:#?}", program)).unwrap();
     
-    // let lua_program = transpile(program);
+    let lua_program = transpile(&program);
 
-    // let lua = lua_program.to_string("\t".into());
-    // write_file("out/lua_test.lua", &lua).unwrap();
+    let lua = lua_program.to_string("\t".into());
+    write_file("out/lua_test.lua", &lua).unwrap();
     // match run_lua(&lua)
     // {
     //     Err(e) => {
