@@ -319,7 +319,7 @@ impl LuaStmt
                 format!("{}{} = {}\n", fmt_args.get_tab(), ids, vals)
             },
             LuaStmt::AssignExpr { assigned, value } => {
-                format!("{}{} = {}", fmt_args.get_tab(), assigned.to_string(fmt_args), value.to_string(fmt_args))
+                format!("{}{} = {}\n", fmt_args.get_tab(), assigned.to_string(fmt_args), value.to_string(fmt_args))
             },
             LuaStmt::LocalDecl { pairs } => {
                 let ids = pairs.iter().map(|i| i.0.clone()).join(", ");
@@ -327,7 +327,7 @@ impl LuaStmt
                 format!("{}local {} = {}\n", fmt_args.get_tab(), ids, vals)
             },
             LuaStmt::While { cond, stmts } => {
-                let mut str = format!("{}while {}\n", fmt_args.get_tab(), cond.to_string(fmt_args));
+                let mut str = format!("{}while {} do\n", fmt_args.get_tab(), cond.to_string(fmt_args));
                 fmt_args.indent += 1;
                 for s in stmts
                 {
@@ -371,32 +371,23 @@ impl LuaStmt
                 str
             },
             LuaStmt::If { condition, body, else_body } => {
-                let mut str = String::new();
-
-                str += &format!("{}if {} then\n", fmt_args.get_tab(), condition.to_string(fmt_args));
+                let mut str = format!("{}if {} then\n", fmt_args.get_tab(), condition.to_string(fmt_args));
                 fmt_args.indent += 1;
-                for s in body.iter()
-                {
+                for s in body.iter() {
                     str += &s.to_string(fmt_args);
                 }
                 fmt_args.indent -= 1;
 
-                match else_body
-                {
-                    Some(else_val) => {
-                        str += &format!("{}else\n", fmt_args.get_tab());
-                        fmt_args.indent += 1;
-                        for s in else_val.iter()
-                        {
-                            str += &s.to_string(fmt_args);
-                        }
-                        fmt_args.indent -= 1;
+                if let Some(else_val) = else_body {
+                    str += &format!("{}else\n", fmt_args.get_tab());
+                    fmt_args.indent += 1;
+                    for s in else_val.iter() {
+                        str += &s.to_string(fmt_args);
                     }
-                    None => {
-                        str += &format!("{}end\n", fmt_args.get_tab())
-                    }
-                };
+                    fmt_args.indent -= 1;
+                }
 
+                str += &format!("{}end\n", fmt_args.get_tab());
                 str
             }
         }

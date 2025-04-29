@@ -1,25 +1,13 @@
 
-fn range(min: Int, max: Int) -> Fn() -> ?Int 
+struct Foo {}
+
+fn Foo.new() -> Foo 
 {
-    let i = min;
-    return || -> ?Int => {
-        if (i < max) 
-        {
-            let old = i;
-            i = i + 1;
-            return old as ?Int;
-        }
-        else
-        {
-            return null;
-        }
-    };
+    return Foo {};
 }
+
 
 fn main()
 {
-    for (i in range(1, 6))
-    {
-        println(i + ""); // should print out 1-5
-    }
+    let foo = Foo.new();
 }

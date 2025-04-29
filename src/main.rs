@@ -12,7 +12,7 @@ pub mod lua_runtime;
 
 fn main() 
 {
-    let file = FileInfo::read("tests/test.rvn", "src").unwrap().as_arc();
+    let file = FileInfo::read("tests/tick-tack-toe.rvn", "src").unwrap().as_arc();
     let program = match compiler::run_validator(&[file])
     {
         Ok(ok) => ok,
@@ -27,12 +27,12 @@ fn main()
     };
 
     
-    write_file("out/test.ast", &format!("{:#?}", program)).unwrap();
+    write_file("out/tick-tack-toe.ast", &format!("{:#?}", program)).unwrap();
     
     let lua_program = transpile(&program);
 
     let lua = lua_program.to_string("\t".into());
-    write_file("out/lua_test.lua", &lua).unwrap();
+    write_file("out/tick-tack-toe.lua", &lua).unwrap();
     match run_lua(&lua)
     {
         Err(e) => {

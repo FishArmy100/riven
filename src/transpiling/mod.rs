@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::{HashMap, HashSet}, sync::Arc};
+use std::{borrow::Cow, cell::RefCell, collections::{HashMap, HashSet}, sync::Arc};
 
 use itertools::Itertools;
 use lua_ast::*;
@@ -6,7 +6,7 @@ use lua_builtins::{append_builtins, INVOKE_EXPR_FUNC};
 use mlua::Either::{Left, Right};
 use uuid::Uuid;
 
-use crate::validation::{ast::{stmt::TypedStatement, LitVal, TypedExpression, TypedIdentifier}, builtins::STRING_TYPE, defs::{func_def::FuncDef, struct_def::StructDef, var_def::VarDef}, CheckedProgram};
+use crate::validation::{ast::{stmt::TypedStatement, LitVal, TypedExpression, TypedIdentifier}, builtins::{self, IS_NONE_ID, STRING_TYPE, UNWRAP_ID}, defs::{func_def::FuncDef, struct_def::StructDef, var_def::VarDef}, info::{func_info::FuncInfo, types::TypeInfo}, CheckedProgram};
 
 pub mod lua_ast;
 pub mod lua_builtins;
@@ -111,13 +111,7 @@ pub fn transpile(program: &CheckedProgram) -> LuaProgram
     let mut lua_stmts = vec![];
 
     // forward declares functions
-    let pairs = program.funcs.iter().filter_map(|f| {
-        let name = context.resolver.get_mut().resolve(f.id.clone());
-        let init = Box::new(LuaExpr::Literal(LuaLit::Nil));
-        Some((name, init))
-    }).collect_vec();
-
-    lua_stmts.push(LuaStmt::LocalDecl { pairs });
+    forward_declare_builtin_funcs(program, &mut context, &mut lua_stmts);
 
     append_builtins(&mut lua_stmts, context.resolver.get_mut());
     lua_stmts.push(LuaStmt::Spacer);
@@ -133,6 +127,27 @@ pub fn transpile(program: &CheckedProgram) -> LuaProgram
     lua_stmts.push(LuaStmt::Comment("Main invoker function".into()));
     create_main_invoker(&mut lua_stmts, context.resolver.get_mut(), program.main.clone());
     LuaProgram { stmts: lua_stmts }
+}
+
+fn forward_declare_builtin_funcs(program: &CheckedProgram, context: &mut TranspileContext, lua_stmts: &mut Vec<LuaStmt>) 
+{
+    let mut pairs = program.funcs.iter().filter_map(|f| {
+        let name = context.resolver.get_mut().resolve(f.id.clone());
+        let init = Box::new(LuaExpr::Literal(LuaLit::Nil));
+        Some((name, init))
+    }).collect_vec();
+
+    pairs.push((
+        context.resolver.get_mut().resolve(IS_NONE_ID.clone()),
+        Box::new(LuaExpr::Literal(LuaLit::Nil))
+    ));
+
+    pairs.push((
+        context.resolver.get_mut().resolve(UNWRAP_ID.clone()),
+        Box::new(LuaExpr::Literal(LuaLit::Nil))
+    ));
+
+    lua_stmts.push(LuaStmt::LocalDecl { pairs });
 }
 
 fn visit_func_def(context: &mut TranspileContext, def: &FuncDef) -> Option<LuaStmt>
@@ -235,8 +250,11 @@ fn visit_stmt(stmt: &TypedStatement, context: &TranspileContext, vars: &HashMap<
         },
         TypedStatement::For { var_id, condition, body } => {
             let var_name = context.resolver.borrow_mut().resolve(var_id.clone());
+            let iter_var = context.resolver.borrow_mut().make_var();
+
+            let iter_val = visit_expr(&condition, context, vars).to_box();
             let iter_expr = LuaExpr::Call { 
-                expr: visit_expr(&condition, context, vars).to_box(), 
+                expr: LuaExpr::Id(iter_var.clone()).to_box(), 
                 args: vec![] 
             };
 
@@ -244,6 +262,7 @@ fn visit_stmt(stmt: &TypedStatement, context: &TranspileContext, vars: &HashMap<
 
             let loop_stmt = LuaStmt::Block { 
                 stmts: [
+                    LuaStmt::LocalDecl { pairs: [(iter_var.clone(), iter_val.clone().to_box())].to_vec() },
                     LuaStmt::LocalDecl { pairs: [(var_name.clone(), iter_expr.clone().to_box())].to_vec() },
                     LuaStmt::While { 
                         cond: LuaExpr::Binary { 
@@ -264,10 +283,18 @@ fn visit_stmt(stmt: &TypedStatement, context: &TranspileContext, vars: &HashMap<
             loop_stmt
         },
         TypedStatement::While { condition, body } => {
-            LuaStmt::While { 
+            context.continue_label_stack.borrow_mut().push();
+
+            let while_stmt = LuaStmt::While { 
                 cond: visit_expr(&condition, context, vars).to_box(), 
-                stmts: [visit_stmt(body, context, vars)].to_vec()
-            }
+                stmts: [
+                    visit_stmt(body, context, vars),
+                    LuaStmt::Label(context.continue_label_stack.borrow().get())
+                ].to_vec()
+            };
+
+            context.continue_label_stack.borrow_mut().pop();
+            while_stmt
         },
     }
 }
@@ -311,7 +338,7 @@ fn visit_expr(expr: &TypedExpression, context: &TranspileContext, vars: &HashMap
         },
         TypedExpression::Binary { left, op, right, returned: _, loc: _ } => {
             let mut op = LuaBinaryOp::from_op(*op);
-            if left.returned() == &*STRING_TYPE || right.returned() == &*STRING_TYPE
+            if (left.returned() == &*STRING_TYPE || right.returned() == &*STRING_TYPE) && op == LuaBinaryOp::Add
             {
                 op = LuaBinaryOp::Concat;
             }
@@ -334,10 +361,15 @@ fn visit_expr(expr: &TypedExpression, context: &TranspileContext, vars: &HashMap
         TypedExpression::Index { indexed, arg, returned: _, loc: _ } => {
             LuaExpr::Index { 
                 expr: visit_expr(&indexed, context, vars).to_box(), 
-                arg: visit_expr(&arg, context, vars).to_box() 
+                arg: LuaExpr::Binary { 
+                    left: visit_expr(&arg, context, vars).to_box(), 
+                    op: LuaBinaryOp::Add, 
+                    right: LuaExpr::Literal(LuaLit::Number(1.0)).to_box(),
+                }.to_box()
             }
         },
         TypedExpression::Access { accessed, name, returned: _, is_assignable: _, loc: _ } => {
+            let accessed_type = accessed.returned().clone();
             let accessed = visit_expr(&accessed, context, vars);
             match name
             {
@@ -345,10 +377,19 @@ fn visit_expr(expr: &TypedExpression, context: &TranspileContext, vars: &HashMap
                     LuaExpr::Access { expr: accessed.to_box(), name: to_member_name(&member) }
                 },
                 Right(fn_id) => {
-                    let def = context.funcs.get(fn_id).unwrap();
-                    let args = (1..def.params.len())
-                        .map(|_| context.resolver.borrow_mut().make_var())
-                        .collect_vec();
+
+                    let args = if let Some(def) = context.funcs.get(fn_id) {
+                        (1..def.params.len())
+                            .map(|_| context.resolver.borrow_mut().make_var())
+                            .collect_vec()
+                    }
+                    else // is a builtin function
+                    {
+                        let info = builtins::get_builtin_member_func(Some(&accessed_type), fn_id).unwrap();
+                        (1..info.parameters.len())
+                            .map(|_| context.resolver.borrow_mut().make_var())
+                            .collect_vec()
+                    };
 
                     let mut forwarded_args = vec![];
                     forwarded_args.push(accessed);
@@ -366,7 +407,9 @@ fn visit_expr(expr: &TypedExpression, context: &TranspileContext, vars: &HashMap
                 }
             }
         },
-        TypedExpression::TypeAccess { accessed, name, func_id, returned, loc } => todo!(),
+        TypedExpression::TypeAccess { accessed: _, name: _, func_id, returned: _, loc: _ } => {
+            LuaExpr::Id(context.resolver.borrow_mut().resolve(func_id.clone()))
+        },
         TypedExpression::Cast { casted, type_info: _, returned: _, loc: _ } => {
             visit_expr(&casted, context, vars)
         },
