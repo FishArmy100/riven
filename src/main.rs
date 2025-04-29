@@ -1,45 +1,44 @@
-use std::sync::Arc;
-use compiler::CompilerError;
-use parsing::ast::{FileNode, Program};
+use lua_runtime::run_lua;
+use transpiling::{lua_ast::{LuaExpr, LuaLit, LuaProgram, LuaStmt}, transpile};
 use utils::{write_file, FileInfo};
-use validation::CheckedProgram;
 
 pub mod lexing;
 pub mod utils;
 pub mod compiler;
 pub mod parsing;
 pub mod validation;
+pub mod transpiling;
+pub mod lua_runtime;
 pub mod config;
 
 fn main() 
 {
-    let file_1 = parse_file("tests/tick-tack-toe.rvn", "src/test");
-    // let file_2 = parse_file("tests/debug.rvn", "src/debug");
-
-    // println!("{:#?}", file_1);
-
-    let program = Program {
-        files: vec![file_1]
-    };
-
-    println!("Context compiled");
-
-    let checked = CheckedProgram::new(&program);
-    match checked
+    let file = FileInfo::read("tests/tick-tack-toe.rvn", "src").unwrap().as_arc();
+    let program = match compiler::run_validator(&[file])
     {
-        Ok(ok) => write_file("out/checked.txt", &format!("{:#?}", ok)).unwrap(),
+        Ok(ok) => ok,
         Err(errs) => {
+            println!("Program compiled with errors:");
             for e in errs
             {
-                println!("{}", e.format_error())
+                println!(" - {}", e)
             }
+            return;
         },
-    }
-}
+    };
 
-fn parse_file(path: &str, namespace: &str) -> Arc<FileNode>
-{
-    let file = FileInfo::read(path, namespace).unwrap();
-    let file = compiler::run_parser(Arc::new(file)).unwrap();
-    Arc::new(file)
+    
+    write_file("out/tick-tack-toe.ast", &format!("{:#?}", program)).unwrap();
+    
+    let lua_program = transpile(&program);
+
+    let lua = lua_program.to_string("\t".into());
+    write_file("out/tick-tack-toe.lua", &lua).unwrap();
+    match run_lua(&lua)
+    {
+        Err(e) => {
+            println!("{}", e.to_string())
+        }
+        Ok(_) => {},
+    }
 }
