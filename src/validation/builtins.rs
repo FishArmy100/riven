@@ -72,7 +72,7 @@ pub fn get_builtin_member_func(parent: Option<&TypeInfo>, id: &Uuid) -> Option<F
                 ],
                 has_self: true,
                 parent: parent.cloned(),
-                decl_data: FuncDeclData::Builtin,
+                decl_data: FuncDeclData::Builtin { has_self: true },
             })
         }
         
@@ -93,7 +93,7 @@ pub fn get_builtin_member_func(parent: Option<&TypeInfo>, id: &Uuid) -> Option<F
                 ], 
                 has_self: true,
                 parent: parent.cloned(),
-                decl_data: FuncDeclData::Builtin,
+                decl_data: FuncDeclData::Builtin { has_self: true },
             })
         }
     }
@@ -156,7 +156,7 @@ pub fn get_builtin_funcs(structs: &[Uuid]) -> Vec<FuncInfo>
         }],
         returned: VOID_TYPE.clone(),
         is_pub: true,
-        decl_data: FuncDeclData::Builtin,
+        decl_data: FuncDeclData::Builtin { has_self: false },
     };
 
     let print_func = FuncInfo {
@@ -172,7 +172,7 @@ pub fn get_builtin_funcs(structs: &[Uuid]) -> Vec<FuncInfo>
         }],
         returned: VOID_TYPE.clone(),
         is_pub: true,
-        decl_data: FuncDeclData::Builtin,
+        decl_data: FuncDeclData::Builtin { has_self: false },
     };
 
     let read_line_func = FuncInfo {
@@ -183,7 +183,7 @@ pub fn get_builtin_funcs(structs: &[Uuid]) -> Vec<FuncInfo>
         parameters: vec![],
         returned: STRING_TYPE.clone(),
         is_pub: true,
-        decl_data: FuncDeclData::Builtin,
+        decl_data: FuncDeclData::Builtin { has_self: false },
     };
 
     let string_to_int_func = FuncInfo {
@@ -199,7 +199,7 @@ pub fn get_builtin_funcs(structs: &[Uuid]) -> Vec<FuncInfo>
         }],
         returned: TypeInfo::Optional(Box::new(INT_TYPE.clone())),
         is_pub: true,
-        decl_data: FuncDeclData::Builtin,
+        decl_data: FuncDeclData::Builtin { has_self: true },
     };
 
     vec![println_func, print_func, read_line_func, string_to_int_func]

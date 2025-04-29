@@ -16,6 +16,7 @@ pub struct FuncDef
     pub params: Vec<FuncDefParam>,
     pub body: Option<FuncDefBody>,
     pub name_loc: Option<TextLoc>,
+    pub has_self: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -46,7 +47,7 @@ impl FuncDef
         let (decl, file) = match &info.decl_data
         {
             FuncDeclData::Decl { decl, file } => (decl, file),
-            FuncDeclData::Builtin => {
+            FuncDeclData::Builtin { has_self } => {
                 return Ok(Self { 
                     id: info.id.clone(), 
                     name: info.name.clone(), 
@@ -55,6 +56,7 @@ impl FuncDef
                     params: info.parameters.iter().map(|p| FuncDefParam { name: p.name.clone(), type_info: p.type_info.clone(), init: None, id: Uuid::new_v4() }).collect(), 
                     body: None,
                     name_loc: None,
+                    has_self: *has_self,
                 })
             },
         };
@@ -156,7 +158,8 @@ impl FuncDef
             params, 
             body: Some(body.unwrap()),
             returned: info.returned.clone(),
-            name_loc: Some(decl.id.get_loc(&file.info ))
+            name_loc: Some(decl.id.get_loc(&file.info)),
+            has_self: info.has_self,
         })
     }
 }

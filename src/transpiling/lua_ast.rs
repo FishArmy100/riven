@@ -1,6 +1,7 @@
 use std::fmt::format;
 
 use itertools::Itertools;
+use mlua::Either::{self, Left, Right};
 
 use crate::validation::operators::{BinaryOpType, UnaryOpType};
 
@@ -147,7 +148,7 @@ impl LuaFormatArgs
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum LuaExpr
 {
     Id(String),
@@ -168,6 +169,11 @@ pub enum LuaExpr
         expr: Box<Self>,
         arg: Box<Self>,
     },
+    Access 
+    {
+        expr: Box<Self>,
+        name: String,
+    },
     Call
     {
         expr: Box<Self>,
@@ -181,7 +187,9 @@ pub enum LuaExpr
     Map
     {
         members: Vec<(String, LuaExpr)>
-    }
+    },
+    Array(Vec<LuaExpr>),
+    Group(Box<LuaExpr>),
 }
 
 impl LuaExpr
@@ -222,6 +230,9 @@ impl LuaExpr
                 str += &format!("{}}}", format_args.get_tab());
                 str
             },
+            LuaExpr::Array(values) => format!("{{ {} }}", values.iter().map(|v| v.to_string(format_args)).join(", ")),
+            LuaExpr::Access { expr, name } => format!("{}.{}", expr.to_string(format_args), name),
+            LuaExpr::Group(g) => format!("({})", g.to_string(format_args))
         }
     }
 
@@ -231,7 +242,7 @@ impl LuaExpr
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum LuaStmt
 {
     Block
@@ -246,6 +257,11 @@ pub enum LuaStmt
     Assign
     {
         pairs: Vec<(String, Box<LuaExpr>)>
+    },
+    AssignExpr 
+    {
+        assigned: Box<LuaExpr>,
+        value: Box<LuaExpr>,
     },
     LocalDecl
     {
@@ -271,7 +287,13 @@ pub enum LuaStmt
     Return(Option<Box<LuaExpr>>),
     Break,
     Spacer,
-    Comment(String)
+    Comment(String),
+    If 
+    {
+        condition: Box<LuaExpr>,
+        body: Vec<LuaStmt>,
+        else_body: Option<Vec<LuaStmt>>,
+    }
 }
 
 impl LuaStmt
@@ -295,6 +317,9 @@ impl LuaStmt
                 let ids = pairs.iter().map(|i| i.0.clone()).join(", ");
                 let vals = pairs.iter().map(|v| v.1.to_string(fmt_args)).join(", ");
                 format!("{}{} = {}\n", fmt_args.get_tab(), ids, vals)
+            },
+            LuaStmt::AssignExpr { assigned, value } => {
+                format!("{}{} = {}", fmt_args.get_tab(), assigned.to_string(fmt_args), value.to_string(fmt_args))
             },
             LuaStmt::LocalDecl { pairs } => {
                 let ids = pairs.iter().map(|i| i.0.clone()).join(", ");
@@ -344,8 +369,42 @@ impl LuaStmt
                 }
 
                 str
+            },
+            LuaStmt::If { condition, body, else_body } => {
+                let mut str = String::new();
+
+                str += &format!("{}if {} then\n", fmt_args.get_tab(), condition.to_string(fmt_args));
+                fmt_args.indent += 1;
+                for s in body.iter()
+                {
+                    str += &s.to_string(fmt_args);
+                }
+                fmt_args.indent -= 1;
+
+                match else_body
+                {
+                    Some(else_val) => {
+                        str += &format!("{}else\n", fmt_args.get_tab());
+                        fmt_args.indent += 1;
+                        for s in else_val.iter()
+                        {
+                            str += &s.to_string(fmt_args);
+                        }
+                        fmt_args.indent -= 1;
+                    }
+                    None => {
+                        str += &format!("{}end\n", fmt_args.get_tab())
+                    }
+                };
+
+                str
             }
         }
+    }
+
+    pub fn to_box(self) -> Box<Self>
+    {
+        Box::new(self)
     }
 }
 

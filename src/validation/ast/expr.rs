@@ -2,6 +2,7 @@ use std::{borrow::Cow, collections::HashMap, sync::{Arc, Mutex}};
 
 use either::Either::{Left, Right};
 use itertools::Itertools;
+use mlua::Either;
 use uuid::Uuid;
 
 use crate::{
@@ -33,6 +34,14 @@ pub enum TypedIdentifier
     Variable(Uuid),
 }
 
+#[derive(Debug, Clone)]
+pub struct TypedLambdaParam 
+{
+    pub name: String,
+    pub id: Uuid,
+    pub type_info: TypeInfo,
+}
+
 #[derive(Debug)]
 pub enum TypedExpression
 {
@@ -56,7 +65,7 @@ pub enum TypedExpression
     },
     Lambda 
     {
-        parameters: Vec<(String, TypeInfo)>,
+        parameters: Vec<TypedLambdaParam>,
         body: Box<TypedStatement>,
         returned: TypeInfo,
         loc: TextLoc,
@@ -93,7 +102,7 @@ pub enum TypedExpression
     Access
     {
         accessed: Box<TypedExpression>,
-        name: String,
+        name: Either<String, Uuid>, // string if a member, id if a member function
         returned: TypeInfo,
         is_assignable: bool,
         loc: TextLoc,
@@ -273,7 +282,6 @@ impl TypedExpression
                             None => (*VOID_TYPE).clone()
                         };
 
-
                         (vec![], return_type)
                     },
                     LambdaParams::Complex { open_pipe: _, parameters, close_pipe: _, arrow: _, return_type } => {
@@ -282,14 +290,20 @@ impl TypedExpression
                             None => (*VOID_TYPE).clone()
                         };
 
-                        let params = parameters.iter().map(|p| -> Result<(String, TypeInfo), TypeError> {
+                        let params = parameters.iter().map(|p| -> Result<TypedLambdaParam, TypeError> {
                             let name = p.name.value_string().unwrap().clone();
                             let Some((_, type_name)) = &p.type_name else {
                                 return Err(TypeError::InvalidLambdaExpressionFormat(loc.clone()));
                             };
 
                             let type_info = TypeInfo::from(type_name, &args.context.type_resolver, args.file)?;
-                            Ok((name, type_info))
+
+
+                            Ok(TypedLambdaParam {
+                                name,
+                                id: Uuid::new_v4(),
+                                type_info,
+                            })
                         }).collect::<Result<Vec<_>, _>>()?;
 
                         (params, return_type)
@@ -301,9 +315,10 @@ impl TypedExpression
                 };
 
                 args.var_stack.get_mut().push_frame();
-                for (name, type_info) in &parameters
+
+                for p in &parameters
                 {
-                    args.var_stack.get_mut().add_var(name.clone(), type_info.clone(), Uuid::new_v4());
+                    args.var_stack.get_mut().add_var(p.name.clone(), p.type_info.clone(), p.id.clone());
                 }
 
                 let body = match TypedStatement::check_block(block, &args.to_stmt_args(Some(&ret_type))) {
@@ -313,7 +328,7 @@ impl TypedExpression
 
                 args.var_stack.get_mut().pop_frame();
 
-                let returned = TypeInfo::Function { args: parameters.iter().map(|p| p.1.clone()).collect(), returned: Box::new(ret_type) };
+                let returned = TypeInfo::Function { args: parameters.iter().map(|p| p.type_info.clone()).collect(), returned: Box::new(ret_type) };
 
                 Ok(Self::Lambda { 
                     parameters, 
@@ -417,7 +432,7 @@ impl TypedExpression
                 
                 match eval_access(expr.returned(), &identifier, args)?
                 {
-                    Some((returned, is_assignable)) => Ok(TypedExpression::Access { 
+                    Some((returned, is_assignable, name)) => Ok(TypedExpression::Access { 
                         accessed: Box::new(expr), 
                         name, 
                         returned, 
@@ -668,7 +683,7 @@ fn check_construction_args(info: &StructInfo, con_args: &[ConstructionArg], args
     Ok(expressions)
 }
 
-fn eval_access(accessed: &TypeInfo, name: &Token, args: &ExprCheckArgs) -> Result<Option<(TypeInfo, bool)>, TypeError>
+fn eval_access(accessed: &TypeInfo, name: &Token, args: &ExprCheckArgs) -> Result<Option<(TypeInfo, bool, Either<String, Uuid>)>, TypeError>
 {
     if let FuncResolverResult::Ok(ok) = args.context.func_resolver.resolve(Some(accessed.clone()), name, args.file)
     {
@@ -680,7 +695,7 @@ fn eval_access(accessed: &TypeInfo, name: &Token, args: &ExprCheckArgs) -> Resul
         
         let params = func_info.parameters[1..].iter().map(|p| p.type_info.clone()).collect_vec();
         let ret = Box::new(func_info.returned.clone());
-        return Ok(Some((TypeInfo::Function { args: params, returned: ret }, false)));
+        return Ok(Some((TypeInfo::Function { args: params, returned: ret }, false, Right(func_info.id.clone()))));
     }
 
     let TypeInfo::Primary(id) = accessed else {
@@ -693,5 +708,5 @@ fn eval_access(accessed: &TypeInfo, name: &Token, args: &ExprCheckArgs) -> Resul
         .unwrap()
         .members()
         .get(&name)
-        .map(|m| m.type_info.clone()).map(|m| (m, true)))
+        .map(|m| m.type_info.clone()).map(|m| (m, true, Left(name.clone()))))
 }

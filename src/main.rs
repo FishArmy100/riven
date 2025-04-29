@@ -33,11 +33,11 @@ fn main()
 
     let lua = lua_program.to_string("\t".into());
     write_file("out/lua_test.lua", &lua).unwrap();
-    // match run_lua(&lua)
-    // {
-    //     Err(e) => {
-    //         println!("{}", e.to_string())
-    //     }
-    //     Ok(_) => {},
-    // }
+    match run_lua(&lua)
+    {
+        Err(e) => {
+            println!("{}", e.to_string())
+        }
+        Ok(_) => {},
+    }
 }

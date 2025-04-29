@@ -1,22 +1,25 @@
 
-struct Vec2 {
-    x: Float = 0.0,
-    y: Float = 0.0,
+fn range(min: Int, max: Int) -> Fn() -> ?Int 
+{
+    let i = min;
+    return || -> ?Int => {
+        if (i < max) 
+        {
+            let old = i;
+            i = i + 1;
+            return old as ?Int;
+        }
+        else
+        {
+            return null;
+        }
+    };
 }
-
-// fn Vec2.add(self, other: Vec2) -> Vec2
-// {
-//    return Vec2 {
-//         x: self.x + other.x,
-//         y: self.y + self.y,
-//     };
-// }
 
 fn main()
 {
-    let a = Vec2 { x:  5.1 }; // default args
-    let b = Vec2 { y: -8.0 };
-
-    // let c = a.add(b); // member function
-    // println("[" + c.x + ":" + c.y + "]"); // member access
+    for (i in range(1, 6))
+    {
+        println(i + ""); // should print out 1-5
+    }
 }

@@ -16,6 +16,9 @@ pub enum FuncDeclData
         file: Arc<FileNode>
     },
     Builtin
+    {
+        has_self: bool,
+    }
 }
 
 #[derive(Debug, Clone)]
