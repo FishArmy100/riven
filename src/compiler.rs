@@ -72,3 +72,5 @@ pub fn run_block_parser(file: &FileInfo) -> Result<BlockStmt, Vec<String>>
         }
     }
 }
+
+pub fn run_validator()
