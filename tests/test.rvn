@@ -1,13 +1,5 @@
 
-struct Foo {}
-
-fn Foo.new() -> Foo 
-{
-    return Foo {};
-}
-
-
 fn main()
 {
-    let foo = Foo.new();
+    println("Hello World!!!!");
 }
