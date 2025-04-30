@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{config::CompilerConfig, lexing::{self, token::{Token, TokenType}, LexerError, LexerResult}, parsing::{self, ast::{BlockStmt, Expression, FileNode, Program}, token_reader::TokenReader, ParserError}, utils::{has_valid_extension, read_file, write_file, FileInfo, TextLoc, TextPos}, validation::CheckedProgram};
+use crate::{config::CompilerConfig, lexing::{self, token::{Token, TokenType}, LexerError, LexerResult}, lua_runtime, parsing::{self, ast::{BlockStmt, Expression, FileNode, Program}, token_reader::TokenReader, ParserError}, transpiling, utils::{has_valid_extension, read_file, write_file, FileInfo, TextLoc, TextPos}, validation::CheckedProgram};
 
 pub trait CompilerError
 {
@@ -24,12 +24,10 @@ pub fn compile_program(config: &CompilerConfig) -> Result<(), Vec<String>>
         return Err(vec![format!("Invalid input file {}", config.input_file)])
     }
 
-    let file_info = match FileInfo::read(&config.input_file, "src") {
+    let file_info = Arc::new(match FileInfo::read(&config.input_file, "src") {
         Ok(ok) => ok,
         Err(e) => return Err(vec![e])
-    };
-
-    let src = read_file(&config.input_file);
+    });
 
     let tokens = match lexing::lex_text(&file_info) {
         LexerResult::Ok(ok) => ok,
@@ -38,13 +36,54 @@ pub fn compile_program(config: &CompilerConfig) -> Result<(), Vec<String>>
 
     if config.debug_lex
     {
-        write_file("out/tokens.txt", &format!("{:#?}", tokens));
+        if let Err(e) = write_file("out/tokens.txt", &format!("{:#?}", tokens)) 
+        {
+            return Err(vec![e])
+        }
     }
 
-    let file_node = match parsing::parse_file(&tokens, Arc::new(file_info)) {
+    let file_node = match parsing::parse_file(&tokens, file_info.clone()) {
         Ok(ok) => ok,
         Err(err) => return Err(err.iter().map(|e| e.format_error()).collect())
     };
+
+    if config.debug_parse
+    {
+        if let Err(e) = write_file("out/ast.txt", &format!("{:#?}", file_info))
+        {
+            return Err(vec![e])
+        }
+    }
+
+    let program = Program { files: vec![Arc::new(file_node)] };
+    let checked_program = match CheckedProgram::new(&program) {
+        Ok(ok) => ok,
+        Err(err) => return Err(err.iter().map(|e| e.format_error()).collect()),
+    };
+
+    if config.debug_validate
+    {
+        if let Err(e) = write_file("out/validated.txt", &format!("{:#?}", checked_program))
+        {
+            return Err(vec![e])
+        }
+    }
+
+    let lua = transpiling::transpile(&checked_program).to_string("\t".into());
+    if let Err(e) = write_file("out/out.lua", &lua)
+    {
+        return Err(vec![e])
+    }
+
+    if config.run_after_compile
+    {
+        if let Err(e) = lua_runtime::run_lua(&lua)
+        {
+            return Err(vec![e.to_string()])
+        }
+    }
+
+    Ok(())
 }
 
 pub fn run_lexer(file: &FileInfo) -> Result<Vec<Token>, Vec<String>>

@@ -11,7 +11,7 @@ pub struct CompilerConfig {
     pub run_after_compile: bool,
 }
 
-fn parse_args() -> CompilerConfig {
+pub fn parse_args() -> CompilerConfig {
     let matches = Command::new("riven")
         .version("0.1")
         .about("A simple compiler frontend")
