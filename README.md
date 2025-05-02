@@ -25,31 +25,6 @@ All output files are written inside of a `out` directory, that is created inside
 
 ## Basic Syntax:
 ```rs
-// functions (implicit `Void` return type)
-fn hello()
-{
-  println("Hello World!");
-}
-
-// member functions
-fn Int.to_string(self) -> String
-{
-  return "" + self;
-}
-
-fn Bool.to_string(self) -> String
-{
-  if (self)
-  {
-    return "True";
-  }
-  else
-  {
-    return "False";
-  }
-}
-
-// functions as variables
 fn main()
 {
   // variables
@@ -77,7 +52,56 @@ fn main()
   // optionals
   let val: ?Int = null; // needs an explicit type name to infer null
   println(val.is_none().to_string()); // "False"
-  val = 7 as ?Int;
+  val = 7 as ?Int; // casting
   println(val.unwrap().to_string()); // "7"
+
+  // Structures
+  let v = Vec2 {};
+  println(v.to_string()); // "[0.0, 0.0]"
+
+  // variable shadowing and structure construction
+  let v = Vec2 {
+    x: 15.9,
+    y: -10.0,
+  };
+
+  println(v.to_string()); // "[15.9, -10.0]"
+}
+
+// functions (implicit `Void` return type)
+fn hello()
+{
+  println("Hello World!");
+}
+
+// member function
+fn Int.to_string(self) -> String
+{
+  return "" + self;
+}
+
+fn Bool.to_string(self) -> String
+{
+  if (self)
+  {
+    return "True";
+  }
+  else
+  {
+    return "False";
+  }
+}
+
+// structure definition
+struct Vec2
+{
+  x: Float = 0.0, // default values
+  y: Float = 0.0,
+}
+
+fn Vec2.to_string(self) -> String
+{
+  // member access
+  return "[" + self.y + ", " + self.y + "]";
 }
 ```
