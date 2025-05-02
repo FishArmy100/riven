@@ -14,7 +14,7 @@ fn main()
     let config = parse_args();
     match compiler::compile_program(&config)
     {
-        Ok(_) => println!("Program compiled successfully!"),
+        Ok(_) => {},
         Err(errors) => {
             println!("Program compiled with errors:");
             for e in errors

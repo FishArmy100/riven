@@ -1,0 +1,26 @@
+fn main()
+{
+    print("Enter first number: ");
+    let input1 = read_line();
+    let num1: ?Int = input1.to_int();
+
+    if (num1.is_none())
+    {
+        println("Invalid number.");
+        return;
+    }
+
+    print("Enter second number: ");
+    let input2 = read_line();
+    let num2: ?Int = input2.to_int();
+
+    if (num2.is_none())
+    {
+        println("Invalid number.");
+        return;
+    }
+
+    let sum = num1.unwrap() + num2.unwrap();
+    print("Sum is: ");
+    println("" + sum);  // crude conversion from Int to String by concatenation
+}

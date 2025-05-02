@@ -1,0 +1,7 @@
+fn main()
+{
+    print("Enter something: ");
+    let input = read_line();
+    print("You entered: ");
+    println(input);
+}
