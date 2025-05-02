@@ -57,6 +57,8 @@ fn main()
   let b = 7;
   let c = a + b;
 
+  hello(); // calling a function
+
   let bound = c.to_string; // using a member function, and binding it
   println(bound()); // "13"
 
