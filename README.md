@@ -51,7 +51,7 @@ fn main()
 
   // optionals
   let val: ?Int = null; // needs an explicit type name to infer null
-  println(val.is_none().to_string()); // "False"
+  println(val.is_none().to_string()); // "True"
   val = 7 as ?Int; // casting
   println(val.unwrap().to_string()); // "7"
 
