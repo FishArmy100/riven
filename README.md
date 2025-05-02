@@ -35,19 +35,19 @@ fn main()
   hello(); // calling a function
 
   let bound = c.to_string; // using a member function, and binding it
-  println(bound()); // "13"
+  println(bound()); // "12"
 
   // lambda expressions
   let lambda = |a: Int, b: Int| -> String => // variable shadowing `a`, `b`
   {
     return (a + b).to_string();
-  }
+  };
 
   println(lambda(1, 2)); // "3"
 
-  let array = [5, 6, 7]; // array of intagers
+  let array = [5, 6, 7]; // array of integers
   array[0] = -1;
-  println(array[1].to_string()) // "6"
+  println(array[1].to_string()); // "6"
 
   // optionals
   let val: ?Int = null; // needs an explicit type name to infer null
@@ -57,7 +57,7 @@ fn main()
 
   // Structures
   let v = Vec2 {};
-  println(v.to_string()); // "[0.0, 0.0]"
+  println(v.to_string()); // "[0, 0]"
 
   // variable shadowing and structure construction
   let v = Vec2 {
@@ -102,6 +102,6 @@ struct Vec2
 fn Vec2.to_string(self) -> String
 {
   // member access
-  return "[" + self.y + ", " + self.y + "]";
+  return "[" + self.x + ", " + self.y + "]";
 }
 ```
